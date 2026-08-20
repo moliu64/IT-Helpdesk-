@@ -1,0 +1,5 @@
+chromadb
+pydantic>=2
+pyyaml
+openai
+sentence-transformers

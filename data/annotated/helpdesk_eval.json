@@ -1,0 +1,386 @@
+[
+  {
+    "ticket_id": "EVAL-0001",
+    "requester": "评测用户01",
+    "title": "域账号登录提示凭据错误",
+    "description": "输入新密码后仍提示凭据错误，用户已删除浏览器缓存并在另一台电脑测试。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "账号与登录",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0002",
+    "requester": "评测用户02",
+    "title": "单点登录页面循环跳转",
+    "description": "访问 SSO 后页面在登录和回调地址之间循环，用户已重启浏览器。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "账号与登录",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0003",
+    "requester": "评测用户03",
+    "title": "新员工账号尚未同步",
+    "description": "新员工收到账号通知但门户提示用户不存在，HR 已确认入职信息。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "账号与登录",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0004",
+    "requester": "评测用户04",
+    "title": "验证器恢复码失效",
+    "description": "手机丢失后恢复码提示已使用，用户无法完成 MFA 登录。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "账号与登录",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0005",
+    "requester": "评测用户05",
+    "title": "分支机构 DNS 解析失败",
+    "description": "访问内部域名返回 SERVFAIL，用户已重连网线但公网正常。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "网络连接",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0006",
+    "requester": "评测用户06",
+    "title": "有线网卡显示未连接",
+    "description": "网线灯不亮且系统显示未识别网络，用户已更换墙上端口。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "网络连接",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0007",
+    "requester": "评测用户07",
+    "title": "办公楼层全部无法访问内网",
+    "description": "二楼约 60 人无法访问文件服务和业务系统，已切换手机热点验证终端正常。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "网络连接",
+      "priority": "P1"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0008",
+    "requester": "评测用户08",
+    "title": "视频会议网络延迟过高",
+    "description": "会议中延迟超过 500ms 且语音断续，用户已关闭下载任务。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "网络连接",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0009",
+    "requester": "评测用户09",
+    "title": "扩展坞外接屏闪烁",
+    "description": "连接扩展坞后外接显示器每隔几秒黑屏，已更换 HDMI 线仍存在。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "硬件设备",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0010",
+    "requester": "评测用户10",
+    "title": "键盘部分按键失灵",
+    "description": "字母 R、T 键偶发无响应，用户已重启并连接另一台电脑复测。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "硬件设备",
+      "priority": "P4"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0011",
+    "requester": "评测用户11",
+    "title": "笔记本风扇持续高速运转",
+    "description": "空闲时风扇仍高速运转且机身发热，用户已关闭大型应用。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "硬件设备",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0012",
+    "requester": "评测用户12",
+    "title": "显示器提示无信号",
+    "description": "主机开机但显示器提示 No Signal，已重新插拔 DP 线。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "硬件设备",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0013",
+    "requester": "评测用户13",
+    "title": "Office 文档打开卡死",
+    "description": "双击 Excel 后窗口无响应，用户已结束进程并以安全模式打开。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "软件应用",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0014",
+    "requester": "评测用户14",
+    "title": "浏览器插件导致页面空白",
+    "description": "内部报表页面白屏，停用最近安装的插件后恢复。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "软件应用",
+      "priority": "P4"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0015",
+    "requester": "评测用户15",
+    "title": "客户端升级后无法启动",
+    "description": "升级客户端后提示缺少 DLL 文件，重装一次仍报错。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "软件应用",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0016",
+    "requester": "评测用户16",
+    "title": "会议软件共享屏幕失败",
+    "description": "点击共享后参与者看到黑屏，用户已切换窗口和全屏模式。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "软件应用",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0017",
+    "requester": "评测用户17",
+    "title": "项目目录读取权限申请",
+    "description": "新项目成员访问共享目录提示 Access Denied，负责人已在工单中确认。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "权限申请",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0018",
+    "requester": "评测用户18",
+    "title": "代码仓库临时写权限",
+    "description": "发布窗口前需要向 release 分支推送，当前只有只读权限。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "权限申请",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0019",
+    "requester": "评测用户19",
+    "title": "报表数据导出权限缺失",
+    "description": "报表能查看但导出按钮灰色，业务负责人已确认岗位需要导出。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "权限申请",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0020",
+    "requester": "评测用户20",
+    "title": "临时管理员权限申请",
+    "description": "安装经过审批的驱动需要本机管理员权限，预计使用两小时。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "权限申请",
+      "priority": "P4"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0021",
+    "requester": "评测用户21",
+    "title": "验证码邮件延迟十分钟",
+    "description": "登录验证码通常十分钟后才到达，垃圾邮件中也未找到。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "邮件通讯",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0022",
+    "requester": "评测用户22",
+    "title": "移动端邮箱不同步",
+    "description": "手机只能看到昨天邮件，手动下拉提示同步失败，电脑端正常。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "邮件通讯",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0023",
+    "requester": "评测用户23",
+    "title": "共享邮箱无法发送",
+    "description": "从共享邮箱发信提示 550 Relay denied，个人邮箱发送正常。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "邮件通讯",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0024",
+    "requester": "评测用户24",
+    "title": "邮件附件下载失败",
+    "description": "点击附件提示文件不存在，网页版和客户端均无法下载。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "邮件通讯",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0025",
+    "requester": "评测用户25",
+    "title": "发现异常异地登录",
+    "description": "审计显示凌晨从海外 IP 登录，用户确认未出差且已修改密码。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "安全事件",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0026",
+    "requester": "评测用户26",
+    "title": "误点击可疑短链接",
+    "description": "用户点击邮件短链接后打开仿冒登录页但未输入密码，已立即关闭页面。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "安全事件",
+      "priority": "P2"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0027",
+    "requester": "评测用户27",
+    "title": "终端杀毒软件隔离脚本",
+    "description": "安全软件隔离未知 PowerShell 脚本，用户未执行后续操作。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "安全事件",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0028",
+    "requester": "评测用户28",
+    "title": "收到冒充财务的附件",
+    "description": "邮件要求打开宏文档并付款，用户已使用举报按钮标记邮件。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "安全事件",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0029",
+    "requester": "评测用户29",
+    "title": "会议室门禁预约异常",
+    "description": "已批准的会议室预约在门禁屏上显示无权限，预约编号可查。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "其他",
+      "priority": "P4"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0030",
+    "requester": "评测用户30",
+    "title": "资产标签脱落补办",
+    "description": "笔记本资产标签磨损无法扫描，设备序列号仍清晰可见。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "其他",
+      "priority": "P4"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0031",
+    "requester": "评测用户31",
+    "title": "新办公区工位搬迁支持",
+    "description": "部门周末搬到新区域，需要提前确认网络点位和电话开通。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "其他",
+      "priority": "P3"
+    }
+  },
+  {
+    "ticket_id": "EVAL-0032",
+    "requester": "评测用户32",
+    "title": "采购软件规格咨询",
+    "description": "采购团队需要确认标准笔记本内存和加密要求后再下单。",
+    "channel": "portal",
+    "created_at": "2026-08-20T09:00:00+08:00",
+    "gold": {
+      "category": "其他",
+      "priority": "P4"
+    }
+  }
+]

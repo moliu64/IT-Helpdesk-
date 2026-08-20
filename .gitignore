@@ -1,0 +1,5 @@
+outputs/
+data/tickets/index/
+__pycache__/
+.pytest_cache/
+.pytest-tmp*/

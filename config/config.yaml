@@ -1,0 +1,18 @@
+llm:
+  base_url: "https://api.deepseek.com/v1"
+  api_key_env: "LLM_API_KEY"
+  model: "deepseek-chat"
+  temperature: 0.1
+embedding:
+  provider: "local"                    # local | openai。默认 local：DeepSeek 无 embedding 接口，避免依赖 OpenAI key
+  model: "BAAI/bge-small-zh-v1.5"      # 本地中文 embedding（sentence-transformers 自动下载）
+rag:
+  index_dir: "data/tickets/index"
+helpdesk:
+  teams: [网络组, 桌面支持组, 应用组, 安全组, 账号权限组, 其他]
+  categories: [账号与登录, 网络连接, 硬件设备, 软件应用, 权限申请, 邮件通讯, 安全事件, 其他]
+  sla_map:
+    P1: 1
+    P2: 4
+    P3: 8
+    P4: 24

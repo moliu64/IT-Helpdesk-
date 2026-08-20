@@ -1,33 +1,36 @@
-# AGENTS.md — 合同审查 Agent 实施说明（直接交给 Codex 执行）
+# AGENTS.md — IT 运维工单 Helpdesk 智能体实施说明（直接交给 Codex 执行）
 
 > 本文件是给 Codex 的执行指令。请严格按顺序实施，每阶段完成前自检验收标准。
-> 同目录下的 `PLAN.md` 是完整规格说明，需要背景/理由时参考；冲突时以本文件为准。
+> 同目录下的 `PLAN.md` 是完整规格说明；冲突时以本文件为准。
+>
+> ⚠️ 本项目由"合同审查"改造而来：`src/` 里可能残留 `parser.py`、`agents/risk.py` 等**合同项目旧代码**（已归档到 `legacy_contract_review/`）。**不要复用或 import 这些旧文件**，一律按本文件重新实现。`src/llm_client.py` 是通用封装，可直接复用。
 
 ---
 
 ## 1. 你的任务
 
-实现一个**合同智能审查**系统：输入一份合同 PDF，输出一份结构化审查报告（Markdown + JSON）。
+实现一个 **IT 运维工单 Helpdesk 智能体**：输入一条工单（文本或 JSON），输出**分诊报告 + 用户回复草稿 + 工程师处理建议 + 自动标签**（Markdown + JSON）。
 
-审查包含四个维度，且这四个维度要能**并行执行**：
+四个维度必须能**并行执行**：
 
-1. 风险条款识别
-2. 合规性审查
-3. 参考判例检索（RAG）
-4. 必备条款完备性检查
+1. 问题分类（账号 / 网络 / 硬件 / 软件 / 权限 / 邮件 / 安全 / 其他）
+2. 优先级与 SLA 评估（P1~P4）
+3. 解决方案检索（RAG：历史工单 + 知识库）
+4. 路由建议（分派支持组）
 
-最后有一个汇总步骤，合并四路结果、去重、交叉校验、按风险等级排序。
+最后汇总：合并四路结果、交叉校验、生成交付物。
 
 ---
 
 ## 2. 硬性规则（必须遵守，违反即返工）
 
-1. **LLM 输出必须校验**：所有调用 LLM 的 Agent，其输出必须经过 Pydantic 模型校验；校验失败要自动重试（最多 3 次），仍失败则返回空列表并记录错误，绝不崩溃。
-2. **禁止编造法条和判例**：`legal_basis`（法条）只能来自内置的合法条清单或 RAG 检索结果；检索不到时必须写 `"依据待人工核实"`，绝不能凭空编法条号。
-3. **LLM 调用统一走一个封装**：所有模型调用只允许通过 `src/llm_client.py`，禁止在 Agent 代码里直接 `openai`/`requests` 调模型。目的是换模型/换 key 只改配置。
-4. **保留纯 Python 回退**：最终系统必须能**不依赖 DeepSeek Harness 也能完整运行**（`python -m src.main`）。DSH 编排是加分项，做成可选入口，不能成为运行前提。
-5. **可配置**：模型名、API key、compliance_scope（行业）、向量库路径全部走 `config/config.yaml`，禁止硬编码。
-6. **输出 JSON Schema 严格按 §5 定义**，字段名、层级、枚举值一字不差（汇总阶段依赖这些契约）。
+1. **LLM 输出顶层必须是 JSON 对象**，形如 `{"results": [...]}`，**禁止裸数组**。原因：`response_format=json_object` 只接受 `{...}` 顶层。
+2. **所有 LLM 输出必须经过 Pydantic 校验**：校验失败自动重试（最多 3 次），仍失败返回空 `results` 并记录错误，绝不崩溃。
+3. **禁止编造解决方案/知识库内容**：`matches` 只能来自 RAG 检索结果；检索不到返回空数组，报告里写"未找到匹配方案，建议人工排查"。
+4. **LLM 调用统一走 `src/llm_client.py`**：禁止在 Agent 里直接 `openai`/`requests` 调模型。
+5. **保留纯 Python 回退**：最终系统必须能**不依赖 DeepSeek Harness 完整运行**（`python -m src.main`）。DSH 编排是可选加分项，不能成为运行前提。
+6. **可配置**：模型名、API key、`teams`（支持组）、`categories`（类别）、`sla_map`（优先级时限）、向量库路径全部走 `config/config.yaml`，禁止硬编码。
+7. **输出 JSON Schema 严格按 §5 定义**，字段名、层级、枚举值一字不差。
 
 ---
 
@@ -35,13 +38,11 @@
 
 - 语言：Python 3.10+
 - LLM：DeepSeek API（`deepseek-chat`，复杂推理可换 `deepseek-reasoner`），走 **OpenAI 兼容接口**
-- PDF 解析：`PyMuPDF`（首选）或 `pdfplumber`
-- 向量库：`Chroma`（本地、简单）
-- Embedding：OpenAI 兼容 embedding API，或 `sentence-transformers`（BGE 系列），二者选一并在配置里可切换
-- 校验：`pydantic`
-- 配置：`pyyaml`
+- 向量库：`Chroma`（本地）
+- Embedding：OpenAI 兼容 embedding API 或 `sentence-transformers`（BGE 系列），config 可切换
+- 校验：`pydantic`；配置：`pyyaml`
 
-`requirements.txt` 至少包含：`pymupdf`、`chromadb`、`pydantic`、`pyyaml`、`openai`（或 `httpx`）、`sentence-transformers`（如选本地 embedding）。
+`requirements.txt`：`chromadb`、`pydantic>=2`、`pyyaml`、`openai`、`sentence-transformers`（不再需要 pymupdf）。
 
 ---
 
@@ -51,130 +52,137 @@
 
 ```yaml
 llm:
-  base_url: "https://api.deepseek.com/v1"   # OpenAI 兼容
-  api_key_env: "LLM_API_KEY"                # 从环境变量读 key，不落盘
+  base_url: "https://api.deepseek.com/v1"
+  api_key_env: "LLM_API_KEY"
   model: "deepseek-chat"
   temperature: 0.1
 embedding:
-  provider: "openai"        # openai | local
-  model: "text-embedding-3-small"   # 或本地 bge 模型名
+  provider: "openai"          # openai | local
+  model: "text-embedding-3-small"
 rag:
-  index_dir: "data/cases/index"
-review:
-  compliance_scope: "general"   # general | labor | lease | sales
+  index_dir: "data/tickets/index"
+helpdesk:
+  teams: [网络组, 桌面支持组, 应用组, 安全组, 账号权限组, 其他]
+  categories: [账号与登录, 网络连接, 硬件设备, 软件应用, 权限申请, 邮件通讯, 安全事件, 其他]
+  sla_map:
+    P1: 1
+    P2: 4
+    P3: 8
+    P4: 24
 ```
 
-**规则**：API key 只能从环境变量读取（如 `os.environ["LLM_API_KEY"]`），禁止写进代码或配置文件。README 里说明如何设置环境变量。
+**规则**：API key 只能从环境变量读取（`os.environ["LLM_API_KEY"]`），禁止写进代码或配置文件。
 
 ---
 
-## 5. 数据契约（各 Agent 输出 JSON Schema，必须严格实现）
+## 5. 数据契约（各 Agent 输出 Schema，必须严格实现）
 
-### 5.1 解析输出（`src/parser.py`）
+> 所有 Agent 输出顶层都是 `{"results": [...]}`。
+
+### 5.1 工单解析（`src/ticket_parser.py`）
 ```json
 {
-  "contract_meta": {"title": "", "parties": [], "date": ""},
-  "clauses": [
-    {"clause_id": "C01", "heading": "违约责任", "content": "..."}
-  ]
+  "ticket": {
+    "ticket_id": "",
+    "requester": "",
+    "title": "",
+    "description": "",
+    "channel": "portal",
+    "created_at": ""
+  }
 }
 ```
-`clause_id` 用 `C01`、`C02`…顺序编号。
+`channel` 枚举：`email|portal|chat|phone`。
 
-### 5.2 风险识别输出（`src/agents/risk.py`）
+### 5.2 分类（`src/agents/classify.py`）
 ```json
-[
-  {
-    "clause_id": "C01",
-    "risk_type": "违约金过高",
-    "risk_level": "high",
-    "description": "约定违约金为合同总额的 50%，明显过高",
-    "suggested_revision": "建议调整为不超过实际损失的 30%",
-    "legal_basis": "《民法典》第585条"
-  }
-]
+{"results": [{"category": "网络连接", "subcategory": "VPN", "confidence": 0.92}]}
 ```
-`risk_level` 枚举：`high | medium | low`。
-`risk_type` 覆盖清单（至少支持）：违约责任不对等、赔偿限额过低、解除权不对等、违约金过高、管辖/仲裁条款不利、担保责任、知识产权归属、保密义务过重、不可抗力、自动续约、竞业限制、单方变更权、验收标准模糊。
+`category` 必须来自 config 的 `helpdesk.categories`；`confidence` 为 0~1 浮点数。
 
-### 5.3 合规审查输出（`src/agents/compliance.py`）
+### 5.3 优先级（`src/agents/priority.py`）
 ```json
-[
+{"results": [
   {
-    "clause_id": "C01",
-    "compliance_issue": "格式条款加重对方责任",
-    "legal_basis": "《民法典》第497条",
-    "suggested_revision": "..."
+    "priority": "P2",
+    "sla_hours": 4,
+    "impact_scope": "团队",
+    "affected_users": 5,
+    "business_blocked": false,
+    "reason": "..."
   }
-]
+]}
 ```
+`priority` 枚举 `P1|P2|P3|P4`；`sla_hours` 从 config 的 `sla_map` 读取（按 priority 查表，禁止硬编码）。
 
-### 5.4 判例检索输出（`src/agents/case_retrieval.py`）
+### 5.4 解决方案检索（`src/agents/solution_retrieval.py`）
 ```json
-[
+{"results": [
   {
-    "risk_point": "违约金过高",
-    "related_cases": [
-      {"case_title": "...诉...合同纠纷案", "court": "...", "key_holding": "...", "relevance": "高"}
+    "query": "VPN 连接失败",
+    "matches": [
+      {"source": "KB-1001", "title": "VPN 常见问题排查", "steps": ["重启客户端"], "relevance": "高"}
     ]
   }
-]
+]}
 ```
+`matches` 只能来自检索结果；检索不到返回 `"matches": []`。
 
-### 5.5 完备性检查输出（`src/agents/completeness.py`）
+### 5.5 路由（`src/agents/routing.py`）
 ```json
-[
-  {"missing_clause": "争议解决方式", "importance": "high", "suggestion": "..."}
-]
+{"results": [{"team": "网络组", "reason": "VPN 属网络基础设施问题"}]}
 ```
-必备条款清单：当事人信息、标的、数量、质量、价款/报酬、履行期限/地点/方式、违约责任、争议解决方式。
+`team` 必须来自 config 的 `helpdesk.teams`。
 
-### 5.6 汇总报告输出（`src/report.py`）
-- `outputs/<合同名>/report.json`：完整机器可读结果（合并去重后的所有问题 + 元数据）
-- `outputs/<合同名>/report.md`：给人看的报告，结构：
-  - 合同基本信息
-  - 风险等级总览（高 X 条 / 中 Y 条 / 低 Z 条）
-  - 问题列表（按 `risk_level` 高→低排序，每条含：条款位置、类型、等级、问题描述、修改建议、法条/判例依据）
-  - 合规性意见
-  - 必备条款完备性
-  - 综合结论与谈判建议
+### 5.6 汇总报告（`src/report.py`）
+- `outputs/<ticket_id>/report.json`：机器可读完整结果
+- `outputs/<ticket_id>/report.md`，结构：
+  - 工单基本信息
+  - 分诊结论（分类 + 优先级/SLA + 路由）
+  - 相似解决方案（来源 + 步骤 + 相关度）
+  - 给用户的回复草稿（安抚 + 预计时限 + 自助排查步骤）
+  - 给工程师的处理建议（内部）
+  - 自动标签（`#网络 #VPN #P2`）
 
-**交叉校验规则**：同一 `clause_id` 被多个 Agent 命中时，合并为一条并标注"多维度命中"；内容冲突时以法律依据更明确者为准，并在报告中注明差异。
+**交叉校验规则**：
+1. 分类与路由不一致 → 报告里标注冲突
+2. `P1` 但影响面非"全员"且非"业务阻断" → 降级并注明原因
+3. 同一事实多 Agent 判断不一致 → 取依据更明确者并标注差异
 
 ---
 
 ## 6. 目录结构（严格按此创建）
 
 ```
-contract-review-agent/
 ├── README.md
 ├── requirements.txt
 ├── config/config.yaml
 ├── data/
-│   ├── raw/               # 原始合同 PDF（放 2~3 份样例）
-│   ├── annotated/         # 评测集 gold 答案
-│   └── cases/             # 判例库原始文本 + index/
+│   ├── raw/               # 原始工单样例（txt/json）
+│   ├── knowledge/         # 知识库 KB
+│   ├── tickets/           # 历史工单库 + index/
+│   └── annotated/         # 评测集 gold
 ├── src/
-│   ├── llm_client.py
-│   ├── parser.py
+│   ├── llm_client.py      # 复用现有，无需重写
+│   ├── ticket_parser.py
 │   ├── main.py
 │   ├── report.py
 │   ├── agents/
-│   │   ├── risk.py
-│   │   ├── compliance.py
-│   │   ├── case_retrieval.py
-│   │   ├── completeness.py
-│   │   └── prompts.py     # 所有 prompt 集中在此，禁止散落在各 agent 文件里
+│   │   ├── classify.py
+│   │   ├── priority.py
+│   │   ├── solution_retrieval.py
+│   │   ├── routing.py
+│   │   └── prompts.py     # 所有 prompt 集中在此
 │   └── rag/
 │       └── vector_store.py
-├── workflow/
-│   └── review.workflow.js # DSH 编排（Phase 6 才做，可选）
-├── scripts/
-│   ├── build_case_index.py
-│   └── evaluate.py
-├── outputs/               # 生成结果，.gitignore
+├── workflow/helpdesk.workflow.js
+├── scripts/build_index.py
+├── scripts/evaluate.py
+├── outputs/
 └── tests/
 ```
+
+**注意**：`legacy_contract_review/` 目录是归档的旧合同代码，**忽略它、不要 import、不要修改**。
 
 ---
 
@@ -183,68 +191,63 @@ contract-review-agent/
 > 每个 Phase 先做、自测验收、再进下一个。不要一次性写完所有文件再跑。
 
 ### Phase 0 — 环境与骨架
-- 创建目录结构、`requirements.txt`、`config/config.yaml`
-- 实现 `src/llm_client.py`：OpenAI 兼容调用 + 强制 JSON 输出 + 失败重试（最多 3 次）
-- **验收**：单独跑一个测试调用能返回合法 JSON
+- 复用 `src/llm_client.py`；确认 `config/config.yaml` 为 §4 结构；确认 `requirements.txt`
+- 若 `llm_client.py` 缺失或不适配，按 §4 重写
+- **验收**：单独跑一个调用，能返回 `{"results":[...]}` 合法 JSON
 
-### Phase 1 — 文档解析与条款切分
-- 实现 `src/parser.py`：PDF → 文本 → 条款列表
-- 条款边界识别：先处理常见编号（"第一条/第1条/1./（一）"），其余 LLM 兜底
-- **验收**：对样例 PDF，人工抽查 10 条，边界正确率 ≥ 90%
+### Phase 1 — 工单解析与标准化
+- 实现 `src/ticket_parser.py`：文本 → §5.1 结构化对象
+- 字段抽取：标题、描述、渠道用启发式，其余 LLM 兜底
+- **验收**：10 条样例文本，标题/描述/渠道抽取正确率 ≥ 80%
 
-### Phase 2 — 单链路跑通（只做风险识别）
-- 实现 `src/agents/prompts.py` + `src/agents/risk.py` + `src/main.py`
-- `main.py` 流程：PDF → 条款 → 风险识别 → 打印简单文本结果
-- **验收**：一份样例合同稳定输出 ≥ 3 条合理风险点，且通过 Pydantic 校验
+### Phase 2 — 单链路跑通（只做分类）
+- 实现 `src/agents/prompts.py` + `classify.py` + `src/main.py`
+- 流程：文本 → 解析 → 分类 → 打印结论
+- **验收**：一条样例工单稳定输出正确 `category` + `confidence`，通过 Pydantic 校验
 
 ### Phase 3 — 扩展到四路 Agent
-- 实现 `compliance.py`、`completeness.py`；`case_retrieval.py` 先返回空列表占位
+- 实现 `priority.py`、`routing.py`；`solution_retrieval.py` 先返回 `{"results":[]}` 占位
 - **验收**：四路都能独立运行、输出符合 §5 schema、内容合理无幻觉
 
-### Phase 4 — 判例检索 RAG
-- 实现 `src/rag/vector_store.py` + `scripts/build_case_index.py`
-- 内置 30~50 条**脱敏判例摘要**（可用公开文书摘要，标注仅用于学习研究）
-- `case_retrieval.py` 接入：由风险点构造 query → 检索 → 返回相关判例
-- **验收**：给定 5 个风险点，Top-3 中至少 1 条相关
+### Phase 4 — 解决方案检索 RAG
+- 实现 `src/rag/vector_store.py` + `scripts/build_index.py`
+- **自建语料**：20~30 篇知识库 KB + 50~80 条历史工单（覆盖全类别，先自构造再人工修）
+- **验收**：给定 5 个问题，检索 Top-3 中至少 1 条相关
 
 ### Phase 5 — 汇总报告与交叉校验
-- 实现 `src/report.py`：去重、冲突消解、按等级排序、生成 `report.md` + `report.json`
-- **验收**：同一条款被多 Agent 命中能合并；报告按高→低排序；markdown 结构符合 §5.6
+- 实现 `src/report.py`：去重、冲突消解、生成 `report.md` + `report.json` + 回复草稿 + 标签
+- **验收**：分类/路由冲突能标注；P1 与影响面不匹配会被降级；报告结构符合 §5.6
 
 ### Phase 6 — DSH 编排（可选加分项）
-- 用 DSH `workflow` 把四路审查用 `parallel()` 编排，barrier 后汇总
-- 前置：`parser` 和 `rag` 建索引作为编排外的步骤
-- **验收**：DSH 能并行跑四路并出汇总报告；同时 `python -m src.main` 纯 Python 版本仍可完整运行
+- 用 DSH `workflow` 的 `parallel()` 编排四路，barrier 后汇总
+- **验收**：DSH 能并行跑四路出报告；`python -m src.main` 纯 Python 版本仍可用
 
 ### Phase 7 — 评测
-- 准备 20~30 份合同 + 人工标注 gold 答案（`data/annotated/`）
-- `scripts/evaluate.py` 计算风险识别 **Precision / Recall / F1** 和风险等级准确率
-- **验收**：输出一组可写进简历的数字（如 `F1 = 0.7x`）
+- 30~50 条工单 + 人工标注；`scripts/evaluate.py` 计算：分类准确率、优先级准确率、RAG Top-3 命中率、端到端耗时
+- **验收**：输出至少一组可写进简历的数字
 
 ### Phase 8 — README 与 Demo
-- README：架构图（文本/mermaid）、快速开始（设置 key → 安装 → 跑样例）、效果对比表
-- 录 2~3 分钟 demo 视频脚本（说明输入、四路并行、输出报告）
+- README：架构图 + 快速开始 + 效果对比表；录 2~3 分钟 demo
 - **验收**：陌生环境按 README 10 分钟内能跑通
 
 ---
 
 ## 8. 完成定义（Definition of Done）
 
-满足以下全部才算完成：
-
-- [ ] `python -m src.main --input 样例合同.pdf` 能端到端产出 `report.md` + `report.json`
-- [ ] 四路审查可并行执行（Python 多线程/进程或 DSH `parallel()`）
-- [ ] 所有 LLM 输出经过 Pydantic 校验 + 重试，无崩溃路径
-- [ ] 无编造法条/判例（未检索到即标注"依据待人工核实"）
+- [ ] `python -m src.main --input 样例工单.txt` 端到端产出 `report.md` + `report.json`
+- [ ] 四路可并行执行（Python 多线程/进程 或 DSH `parallel()`）
+- [ ] 所有 LLM 输出顶层为 `{"results":[...]}`，经 Pydantic 校验 + 重试，无崩溃路径
+- [ ] 无编造解决方案（检索不到即标注"建议人工排查"）
+- [ ] 分类/优先级/路由/团队 全部从 config 读取，无硬编码
 - [ ] 有评测脚本和至少一组指标数字
 - [ ] README 可让陌生人在 10 分钟内跑通
 
 ---
 
-## 9. 注意事项（实现时容易踩的坑）
+## 9. 注意事项（易踩坑）
 
-1. 中文合同编号格式多样，条款切分是隐藏难点——先用启发式，再 LLM 兜底。
-2. DeepSeek 的 JSON 模式若不稳定，用 `response_format` + 手动 `json.loads` 双保险，解析失败走重试。
-3. 并行四路时注意线程安全：`llm_client` 和向量库访问要能并发调用（Chroma 用锁或每线程独立 client）。
-4. `config.yaml` 里不要放真实 key；示例文件写占位符，真实 key 走环境变量。
+1. **JSON 顶层必须是对象**（`{"results":[...]}`），不要重蹈合同项目裸数组被 `json_object` 拒绝的覆辙。
+2. **优先级宁可保守**：P1 误报代价大，交叉校验里做好降级。
+3. **并发线程安全**：四路并行时 `llm_client` 和 Chroma 要能并发（锁或每线程独立 client）。
+4. **`legacy_contract_review/` 只归档不引用**。
 5. `outputs/` 和向量索引目录加入 `.gitignore`。
