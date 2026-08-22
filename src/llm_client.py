@@ -15,19 +15,33 @@ except ImportError:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parents[1]
 
+def _load_dotenv() -> None:
+    """Load simple KEY=VALUE pairs without adding a dotenv dependency."""
+    env_file = ROOT / ".env"
+    if not env_file.exists():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
 def load_config() -> dict[str, Any]:
+    _load_dotenv()
     with (ROOT / "config" / "config.yaml").open(encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 class LLMClient:
     def __init__(self, config: dict[str, Any] | None = None, client: Any = None):
         cfg = (config or load_config()).get("llm", {})
-        self.model = cfg.get("model", "deepseek-chat")
-        self.temperature = cfg.get("temperature", 0.1)
+        self.base_url = os.getenv("LLM_BASE_URL", cfg.get("base_url", "https://api.deepseek.com/v1"))
+        self.model = os.getenv("LLM_MODEL", cfg.get("model", "deepseek-chat"))
+        self.temperature = float(os.getenv("LLM_TEMPERATURE", cfg.get("temperature", 0.1)))
         self.api_key = os.getenv(cfg.get("api_key_env", "LLM_API_KEY"), "")
         self._client = client
         if self._client is None and OpenAI and self.api_key:
-            self._client = OpenAI(api_key=self.api_key, base_url=cfg.get("base_url"))
+            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def json_completion(self, messages: list[dict[str, str]], retries: int = 3) -> Any:
         last_error = None

@@ -2,4 +2,7 @@ outputs/
 data/tickets/index/
 __pycache__/
 .pytest_cache/
+ui/helpdesk.db
+.env
+.pytest-*/
 .pytest-tmp*/

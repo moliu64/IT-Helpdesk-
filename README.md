@@ -96,6 +96,15 @@ python scripts/evaluate.py
 
 分类、SLA、检索和路由职责单一，可以并行提速并独立调优；汇总层再做交叉校验，尤其能降低 P1 误判和分类/路由不一致带来的分派错误。解决方案只展示 RAG 实际检索结果，检索不到时明确提示人工排查，不编造知识库内容。
 
+## Harness 编排（DSH workflow）
+
+项目提供两个等价的编排入口：
+
+1. **Python 版**（默认）：`src/main.py` 用 `ThreadPoolExecutor` 把分类/优先级/解决方案检索三路并行，路由依赖分类结果串行执行，生产可直接运行。
+2. **DSH workflow 版**：`workflow/helpdesk.workflow.js` 用 DeepSeek Harness 原生的 `parallel()` + subagent fan-out 编排同样的四路 Agent，展示「多智能体编排」的 Harness 实现。
+
+DSH 版在 workflow 工具中运行：`meta` 填项目信息、`args.ticket` 传工单文本、`script` 填 `workflow/helpdesk.workflow.js` 的内容。每个 subagent 用 JSON Schema 校验输出，与 Python 版的数据契约一致；解决方案由 subagent 读取 `data/knowledge` 与 `data/tickets` 语料检索（生产级 RAG 用 Chroma+BGE 见 `src/rag/vector_store.py`）。
+
 ## 测试
 
 ```powershell
