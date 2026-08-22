@@ -22,16 +22,25 @@ flowchart TD
 
 ## 快速开始
 
+先复制 `.env.example` 为 `.env`，然后填写自己的 DeepSeek key。`.env` 已被 Git 忽略，不会提交到仓库。
+
 PowerShell：
 
 ```powershell
-$env:LLM_API_KEY="你的 DeepSeek API Key"
-$env:HF_HUB_OFFLINE="1"
-$env:TRANSFORMERS_OFFLINE="1"
+Copy-Item .env.example .env
+# 编辑 .env，填写 LLM_API_KEY
 python -m pip install -r requirements.txt
 python scripts/build_index.py
 python -m src.main --input data/raw/sample_ticket.txt
 ```
+
+启动本地 Web UI：
+
+```powershell
+python ui/server.py 8787
+```
+
+打开 <http://127.0.0.1:8787>。UI 支持固定字段录入、按用户隔离历史会话、历史工单搜索、RAG 方案查看和报告回读。
 
 Linux/macOS：
 
@@ -84,13 +93,9 @@ $env:HF_HUB_OFFLINE="1"; $env:TRANSFORMERS_OFFLINE="1"
 python scripts/evaluate.py
 ```
 
-脚本计算分类准确率、优先级准确率和 RAG Top-3 命中率，并写入 `outputs/eval_result.json`。当前 32 条评测集的实测结果：
+脚本计算分类准确率、优先级准确率和 RAG Top-3 命中率，并写入 `outputs/eval_result.json`。指标必须在配置有效的 `LLM_API_KEY` 环境下实际运行后再记录；没有 key 时脚本会写入 `status: not_run`，不会伪造数字。
 
-| 指标 | 结果 |
-|---|---|
-| 分类准确率 | 87.5%（28/32，其余 4 条均为"其他"类被判为具体类别） |
-| 优先级准确率 | 65.6%（21/32；11 条误判全部为相邻一级，±1 级内 100%，无 P1 漏判） |
-| RAG Top-3 命中率 | 100%（检索覆盖率，语料覆盖全部 8 个类别） |
+当前开发环境未提交可复现的真实模型指标；运行评测脚本后，将 `outputs/eval_result.json` 中的结果填入发布说明。
 
 ## 为什么使用多 Agent
 
@@ -100,7 +105,7 @@ python scripts/evaluate.py
 
 项目提供两个等价的编排入口：
 
-1. **Python 版**（默认）：`src/main.py` 用 `ThreadPoolExecutor` 把分类/优先级/解决方案检索三路并行，路由依赖分类结果串行执行，生产可直接运行。
+1. **Python 版**（默认）：`src/main.py` 依次执行解析、分类、优先级、RAG 检索和路由，并通过统一报告层生成结果，生产可直接运行。
 2. **DSH workflow 版**：`workflow/helpdesk.workflow.js` 用 DeepSeek Harness 原生的 `parallel()` + subagent fan-out 编排同样的四路 Agent，展示「多智能体编排」的 Harness 实现。
 
 DSH 版在 workflow 工具中运行：`meta` 填项目信息、`args.ticket` 传工单文本、`script` 填 `workflow/helpdesk.workflow.js` 的内容。每个 subagent 用 JSON Schema 校验输出，与 Python 版的数据契约一致；解决方案由 subagent 读取 `data/knowledge` 与 `data/tickets` 语料检索（生产级 RAG 用 Chroma+BGE 见 `src/rag/vector_store.py`）。
@@ -111,3 +116,9 @@ DSH 版在 workflow 工具中运行：`meta` 填项目信息、`args.ticket` 传
 python -m pytest tests -q
 ```
 
+## GitHub 发布清单
+
+- 提交 `.env.example`，不要提交 `.env`、`ui/helpdesk.db`、`outputs/` 或 `data/tickets/index/`。
+- 在 GitHub Actions 或本机设置 `LLM_API_KEY`，不要把 key 写入 YAML、README 或源码。
+- 首次运行前设置 `HF_HUB_OFFLINE=1` 和 `TRANSFORMERS_OFFLINE=1`，确保使用本地缓存的 BGE 模型。
+- `legacy_contract_review/` 是历史合同项目归档，仅保留作迁移参考，运行代码不会 import 它。

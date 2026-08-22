@@ -7,28 +7,34 @@
   <style>
     :root { --ink:#18212b; --muted:#687582; --line:#dbe3e8; --paper:#f7f9fa; --panel:#fff; --blue:#1769aa; --blue-soft:#eaf3fb; --orange:#ef8f45; --green:#238b68; --red:#c94e4e; }
     * { box-sizing:border-box; }
+    html, body { height:100%; overflow:hidden; }
     body { margin:0; color:var(--ink); background:var(--paper); font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
-    .shell { min-height:100vh; display:grid; grid-template-columns:330px 1fr; }
-    aside { background:#132331; color:#eef5f8; padding:28px 22px; display:flex; flex-direction:column; min-height:100vh; overflow:hidden; }
+    .shell { height:100vh; display:grid; grid-template-columns:330px 1fr; overflow:hidden; }
+    aside { background:#132331; color:#eef5f8; padding:28px 22px; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
     .brand { display:flex; gap:12px; align-items:center; margin-bottom:46px; }
     .brand-mark { width:38px; height:38px; display:grid; place-items:center; background:var(--orange); color:#132331; font-weight:900; border-radius:10px; letter-spacing:-2px; }
     .brand strong { display:block; font-size:15px; letter-spacing:.04em; }
     .brand span { display:block; margin-top:3px; color:#9db0bd; font-size:11px; }
     .side-copy { margin-top:auto; border-top:1px solid #30424e; padding-top:18px; color:#aebdc5; font-size:12px; line-height:1.7; flex-shrink:0; }
-    .history { margin-top:18px; padding-top:18px; border-top:1px solid #30424e; overflow:auto; min-height:0; }
+    .history { margin-top:18px; padding-top:18px; border-top:1px solid #30424e; display:flex; flex-direction:column; min-height:0; flex:1; }
+    #historyList { overflow:auto; min-height:0; flex:1; padding-right:4px; }
+    .history-search { display:flex; gap:7px; padding-top:10px; flex-shrink:0; }
+    .history-search input { color:#eef5f8; background:#1b3040; border-color:#30424e; min-width:0; }
+    .history-search button { background:var(--orange); color:#132331; padding:9px 12px; flex-shrink:0; }
     .history h2 { margin:0 0 12px; font-size:14px; }
     .history-note { color:#aebdc5; font-size:11px; line-height:1.5; margin-bottom:12px; }
     .history-item { display:block; width:100%; text-align:left; border:1px solid #30424e; background:#1b3040; margin:7px 0; padding:10px; border-radius:7px; color:#eef5f8; }
     .history-item:hover { border-color:var(--orange); background:#243b4b; }
     .history-item strong { display:block; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .history-item small { display:block; color:var(--muted); font-size:10px; margin-top:5px; }
-    main { padding:38px clamp(24px, 5vw, 72px); max-width:1440px; width:100%; margin:0 auto; }
+    main { padding:30px clamp(24px, 5vw, 72px); max-width:1440px; width:100%; height:100vh; margin:0 auto; overflow:hidden; }
     .topline { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:28px; }
     h1 { margin:0; font-family:Georgia, "Times New Roman", serif; font-size:clamp(28px,3.5vw,45px); font-weight:500; letter-spacing:-.02em; }
     .eyebrow { color:var(--blue); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.14em; margin-bottom:9px; }
     .status { color:var(--muted); font-size:13px; padding-top:12px; }
-    .workspace { display:grid; grid-template-columns:minmax(300px, .8fr) minmax(420px, 1.2fr); gap:22px; align-items:start; }
-    .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 7px 22px rgba(23,42,55,.04); }
+    .workspace { display:grid; grid-template-columns:minmax(300px, .8fr) minmax(420px, 1.2fr); gap:22px; align-items:stretch; height:calc(100vh - 118px); overflow:hidden; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 7px 22px rgba(23,42,55,.04); max-height:100%; }
+    #output { overflow:auto; }
     .panel-head { padding:18px 20px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
     .panel-head h2 { margin:0; font-size:14px; letter-spacing:.02em; }
     .panel-head small { color:var(--muted); font-size:11px; }
@@ -40,7 +46,7 @@
     .field { min-width:0; }
     .field label { margin-bottom:6px; }
     label { display:block; color:var(--muted); font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; margin:0 0 8px; }
-    textarea { width:100%; min-height:290px; resize:vertical; border:1px solid var(--line); border-radius:8px; padding:15px; color:var(--ink); background:#fbfcfd; font:14px/1.7 inherit; outline:none; }
+    textarea { width:100%; min-height:180px; max-height:250px; resize:vertical; border:1px solid var(--line); border-radius:8px; padding:15px; color:var(--ink); background:#fbfcfd; font:14px/1.7 inherit; outline:none; }
     textarea:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-soft); }
     .actions { display:flex; gap:10px; margin-top:14px; }
     button { border:0; border-radius:7px; padding:11px 15px; font:700 13px inherit; cursor:pointer; }
@@ -66,7 +72,7 @@
     .section { padding:20px; border-bottom:1px solid var(--line); }
     .section:last-child { border-bottom:0; }
     .section h3 { margin:0 0 12px; font-size:13px; }
-    .section p { margin:0; color:#42535e; font-size:13px; line-height:1.7; }
+    .section p { margin:0; color:#42535e; font-size:13px; line-height:1.75; white-space:pre-line; }
     .tag { display:inline-block; margin:0 6px 6px 0; padding:5px 8px; border-radius:5px; background:var(--blue-soft); color:var(--blue); font:700 11px ui-monospace, monospace; }
     .solution { padding:12px; margin-top:9px; border:1px solid var(--line); border-left:3px solid var(--orange); border-radius:7px; }
     .solution strong { font-size:13px; }
@@ -85,6 +91,7 @@
       <h2>历史工单</h2>
       <div class="history-note">仅显示当前用户的记录。切换用户标识后，历史列表会自动隔离。</div>
       <div id="historyList"><p class="history-note">请先填写用户标识</p></div>
+      <div class="history-search"><input id="historyQuery" placeholder="工单号或标题" /><button id="historySearch" title="搜索历史工单">搜索</button></div>
       </section>
       <div class="side-copy">四路智能 Agent 协同处理<br>分类 · SLA · 方案 · 路由<br><br>结果仅供运维分诊参考，关键操作请按组织流程复核。</div>
     </aside>
@@ -118,9 +125,11 @@
     const sample = { userId:'zhangsan', ticketId:'T-20260822-001', title:'VPN 无法连接', requester:'张三', description:'今天开始连接公司 VPN 超时，无法访问内部系统。', channel:'portal', createdAt:'2026-08-22T09:30' };
     const $ = (id) => document.getElementById(id);
     function fill(data) { Object.entries(data).forEach(([key,value]) => { const el=$(key); if(el) el.value=value; }); }
-    function refreshHistory() { const user=encodeURIComponent($('userId').value.trim()); if(!user){ $('historyList').innerHTML='<p class="history-note">请先填写用户标识</p>'; return; } fetch('/api/history?user_id='+user).then(r=>r.json()).then(items=>{ $('historyList').innerHTML=items.length ? items.map(x=>`<button class="history-item" data-id="${esc(x.ticket_id)}"><strong>${esc(x.title)}</strong><small>${esc(x.ticket_id)} · ${esc(x.created_at)}</small></button>`).join('') : '<p class="history-note">暂无历史工单</p>'; document.querySelectorAll('.history-item').forEach(btn=>btn.onclick=()=>loadHistory(btn.dataset.id)); }); }
+    function refreshHistory() { const user=encodeURIComponent($('userId').value.trim()), q=encodeURIComponent($('historyQuery').value.trim()); if(!user){ $('historyList').innerHTML='<p class="history-note">请先填写用户标识</p>'; return; } fetch('/api/history?user_id='+user+'&q='+q).then(r=>r.json()).then(items=>{ $('historyList').innerHTML=items.length ? items.map(x=>`<button class="history-item" data-id="${esc(x.ticket_id)}"><strong>${esc(x.title)}</strong><small>${esc(x.ticket_id)} · ${esc(x.created_at)}</small></button>`).join('') : '<p class="history-note">没有匹配的历史工单</p>'; document.querySelectorAll('.history-item').forEach(btn=>btn.onclick=()=>loadHistory(btn.dataset.id)); }); }
     function loadHistory(ticketId) { const user=encodeURIComponent($('userId').value.trim()); fetch(`/api/conversation?user_id=${user}&ticket_id=${encodeURIComponent(ticketId)}`).then(r=>r.json()).then(report=>{ render(report); $('status').textContent='已载入历史工单 '+ticketId; }); }
     $('userId').addEventListener('change', refreshHistory);
+    $('historySearch').onclick = refreshHistory;
+    $('historyQuery').addEventListener('keydown', e => { if(e.key==='Enter') refreshHistory(); });
     $('sample').onclick = () => { fill(sample); refreshHistory(); $('title').focus(); };
     function esc(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function render(report) {
@@ -128,7 +137,7 @@
       const solutions = (report.solutions?.[0]?.matches || []).map(m => `<div class="solution"><strong>${esc(m.title)}</strong><small>${esc(m.source)} · ${esc(m.relevance)}</small><ol>${(m.steps||[]).map(s=>`<li>${esc(s)}</li>`).join('')}</ol></div>`).join('') || '<p>未找到匹配方案，建议人工排查。</p>';
       const conflicts = (report.conflicts || []).map(x => `<p class="conflict">交叉校验：${esc(x)}</p>`).join('');
       $('empty').style.display = 'none'; $('result').className = 'result show';
-      $('result').innerHTML = `<div class="triage"><div class="metric"><div class="k">问题分类</div><div class="v">${esc(c.category || '待确认')}</div><div class="sub">${esc(c.subcategory || '')}</div></div><div class="metric"><div class="k">优先级</div><div class="v priority">${esc(p)}</div><div class="sub">SLA ${esc(triage.sla_hours || '—')} 小时</div></div><div class="metric"><div class="k">建议路由</div><div class="v">${esc(r.team || '待分派')}</div><div class="sub">支持组</div></div><div class="metric"><div class="k">置信度</div><div class="v">${c.confidence ? Math.round(c.confidence*100)+'%' : '—'}</div><div class="sub">分类 Agent</div></div></div><div class="track"><div class="node"><i class="dot"></i>解析</div><i class="rail"></i><div class="node"><i class="dot"></i>四路审查</div><i class="rail"></i><div class="node"><i class="dot"></i>交叉校验</div><i class="rail"></i><div class="node"><i class="dot"></i>已出报告</div></div><div class="section"><h3>工单摘要</h3><p><strong>${esc(t.title)}</strong><br>${esc(t.description)}</p>${conflicts}</div><div class="section"><h3>相似解决方案</h3>${solutions}</div><div class="section"><h3>给用户的回复草稿</h3><p>${esc(report.user_reply_draft || '暂无')}</p></div><div class="section"><h3>给工程师的处理建议</h3><p>${esc(report.engineer_advice || '暂无')}</p></div><div class="section"><h3>自动标签</h3>${(report.tags||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join('') || '<p>暂无标签</p>'}</div>`;
+      $('result').innerHTML = `<div class="triage"><div class="metric"><div class="k">问题分类</div><div class="v">${esc(c.category || '待确认')}</div><div class="sub">${esc(c.subcategory || '')}</div></div><div class="metric"><div class="k">优先级</div><div class="v priority">${esc(p)}</div><div class="sub">SLA ${esc(triage.sla_hours || '—')} 小时<br>P1 最高 → P2 → P3 → P4 最低</div></div><div class="metric"><div class="k">建议路由</div><div class="v">${esc(r.team || '待分派')}</div><div class="sub">支持组</div></div><div class="metric"><div class="k">置信度</div><div class="v">${c.confidence ? Math.round(c.confidence*100)+'%' : '—'}</div><div class="sub">分类 Agent</div></div></div><div class="track"><div class="node"><i class="dot"></i>解析</div><i class="rail"></i><div class="node"><i class="dot"></i>四路审查</div><i class="rail"></i><div class="node"><i class="dot"></i>交叉校验</div><i class="rail"></i><div class="node"><i class="dot"></i>已出报告</div></div><div class="section"><h3>工单摘要</h3><p><strong>${esc(t.title)}</strong><br>${esc(t.description)}</p>${conflicts}</div><div class="section"><h3>相似解决方案</h3>${solutions}</div><div class="section"><h3>给用户的回复草稿</h3><p>${esc(report.user_reply_draft || '暂无')}</p></div><div class="section"><h3>给工程师的处理建议</h3><p>${esc(report.engineer_advice || '暂无')}</p></div><div class="section"><h3>自动标签</h3>${(report.tags||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join('') || '<p>暂无标签</p>'}</div>`;
     }
     $('run').onclick = async () => { const fields={user_id:$('userId').value.trim(), ticket:{ticket_id:$('ticketId').value.trim(), requester:$('requester').value.trim(), title:$('title').value.trim(), description:$('description').value.trim(), channel:$('channel').value, created_at:$('createdAt').value}}; if(!fields.user_id){ $('status').textContent='请先填写用户标识'; return; } if(!fields.ticket.title || !fields.ticket.description){ $('status').textContent='标题和描述不能为空'; return; } $('run').disabled=true; $('status').textContent='四路 Agent 处理中…'; try { const res=await fetch('/api/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fields)}); const data=await res.json(); if(!res.ok) throw new Error(data.error||'运行失败'); render(data); refreshHistory(); $('status').textContent='报告已生成'; } catch(e) { $('status').textContent=e.message; } finally { $('run').disabled=false; } };
   </script>

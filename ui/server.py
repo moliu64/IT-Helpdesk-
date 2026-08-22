@@ -4,6 +4,7 @@ import json
 import sqlite3
 import sys
 from datetime import datetime
+from uuid import uuid4
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -46,7 +47,12 @@ def review_ticket(payload: dict) -> dict:
     if not fields.get("title") or not fields.get("description"):
         raise ValueError("标题和描述不能为空")
     fields = dict(fields)
-    fields.setdefault("ticket_id", f"T-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+    original_ticket_id = fields.get("ticket_id", "").strip()
+    base_id = original_ticket_id or "T"
+    # Every submission is a new isolated conversation, even when fields are edited or
+    # the user reuses the same visible ticket number.
+    fields["ticket_id"] = f"{base_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:6]}"
+    fields["source_ticket_id"] = original_ticket_id
     parsed = parse_ticket({"ticket": fields})
     ticket = parsed["ticket"]
     classification = classify_ticket(ticket)
@@ -76,9 +82,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         from urllib.parse import parse_qs, urlparse
         if self.path.startswith("/api/history"):
-            user_id = parse_qs(urlparse(self.path).query).get("user_id", [""])[0].strip()
+            query = parse_qs(urlparse(self.path).query)
+            user_id = query.get("user_id", [""])[0].strip()
+            keyword = query.get("q", [""])[0].strip()
             conn = db()
-            rows = conn.execute("SELECT ticket_id,title,created_at FROM conversations WHERE user_id=? ORDER BY id DESC", (user_id,)).fetchall()
+            rows = conn.execute("SELECT ticket_id,title,created_at FROM conversations WHERE user_id=? AND (title LIKE ? OR ticket_id LIKE ?) ORDER BY id DESC",
+                                (user_id, f"%{keyword}%", f"%{keyword}%")).fetchall()
             conn.close()
             self._send(200, json.dumps([dict(row) for row in rows], ensure_ascii=False).encode(), "application/json; charset=utf-8")
             return

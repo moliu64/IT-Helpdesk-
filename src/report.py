@@ -29,6 +29,27 @@ def build_report(ticket: dict[str, Any], classification: dict, priority: dict,
     sla_hours = sla_map.get(effective_priority, pri.get("sla_hours", ""))
     solutions_results = solutions.get("results", [])
     matches = solutions_results[0].get("matches", []) if solutions_results else []
+    category = cls.get("category", "待确认")
+    subcategory = cls.get("subcategory", "")
+    title = ticket.get("title", "该工单")
+    description = ticket.get("description", "未提供")
+    user_steps = []
+    for match in matches[:2]:
+        user_steps.extend(match.get("steps", [])[:3])
+    if user_steps:
+        user_action = "建议您按以下顺序尝试：" + "；".join(user_steps) + "。完成后请回复操作结果、错误提示和发生时间。"
+    else:
+        user_action = "目前知识库没有找到与该问题直接匹配的方案，请不要反复修改系统配置；请补充截图、错误码、发生时间、影响设备或账号信息，等待工程师人工排查。"
+    engineer_points = [
+        f"1. 复现确认：围绕“{title}”复现问题，记录首次出现时间、频率、完整错误信息和影响范围。",
+        f"2. 输入核对：核对申请人、渠道、工单描述及已尝试操作，避免重复执行已经失败的步骤。当前描述：{description}",
+        f"3. 分诊依据：类别为“{category} / {subcategory}”，建议路由“{route.get('team', '待分派')}”，优先级“{effective_priority}”，SLA 为 {sla_hours} 小时。",
+    ]
+    if matches:
+        engineer_points.append("4. 方案验证：优先按已检索方案逐项验证，并记录每一步的输入、结果和时间；不得跳过日志留存。命中来源：" + "、".join(m.get("source", "") for m in matches) + "。")
+    else:
+        engineer_points.append("4. 无检索命中：从账号状态、网络连通性、客户端/设备状态和服务端日志四个方向建立排查路径；当前没有可直接复用的知识库步骤。")
+    engineer_points.append("5. 升级条件：若影响范围扩大、业务阻断、出现安全告警或超过 SLA 未恢复，请在升级记录中附上复现步骤、日志位置、错误码和已排除项。")
     tags = []
     if cls.get("category"): tags.append("#" + cls["category"].replace("与", ""))
     if cls.get("subcategory"): tags.append("#" + cls["subcategory"].replace(" ", ""))
@@ -37,8 +58,8 @@ def build_report(ticket: dict[str, Any], classification: dict, priority: dict,
         "ticket": ticket, "triage": {"classification": cls, "priority": effective_priority,
         "sla_hours": sla_hours, "routing": route}, "solutions": solutions_results,
         "conflicts": conflicts, "tags": tags,
-        "user_reply_draft": (f"您好，我们已收到您的工单“{ticket.get('title', '')}”。当前初步分类为{cls.get('category', '待确认')}，预计在 {sla_hours} 小时内响应。" + ("您可以先按匹配方案中的步骤排查。" if matches else "暂未找到匹配方案，建议人工排查。")),
-        "engineer_advice": "请核对工单描述、复现步骤、错误信息和影响范围；" + ("优先参考检索到的知识库步骤。" if matches else "当前无检索命中，需人工建立排查路径。"),
+        "user_reply_draft": (f"您好，我们已收到您的工单“{title}”。初步判断为“{category} / {subcategory}”，当前优先级为 {effective_priority}，预计在 {sla_hours} 小时内响应。{user_action}"),
+        "engineer_advice": "\n".join(engineer_points),
     }
     target = output_root or ROOT / "outputs"
     folder = target / ticket.get("ticket_id", "UNASSIGNED")
