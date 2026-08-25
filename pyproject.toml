@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "it-helpdesk-agent"
+version = "0.1.0"
+description = "A multi-agent IT Helpdesk ticket triage and RAG demo"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { file = "LICENSE" }
+authors = [{ name = "moliu64" }]
+dynamic = ["dependencies"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+
+[project.urls]
+Repository = "https://github.com/moliu64/IT-Helpdesk-"
+Issues = "https://github.com/moliu64/IT-Helpdesk-/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+include = ["src*"]

@@ -1,124 +1,141 @@
-# IT 运维工单 Helpdesk 智能体
+# IT Helpdesk 多智能体工单分诊系统
 
-输入一条 IT 工单文本或 JSON，系统将工单标准化后交给四路审查 Agent：问题分类、优先级与 SLA、历史工单/知识库 RAG 检索、支持组路由；最后生成分诊报告、用户回复草稿、工程师处理建议和自动标签。
+[![Tests](https://github.com/moliu64/IT-Helpdesk-/actions/workflows/tests.yml/badge.svg)](https://github.com/moliu64/IT-Helpdesk-/actions/workflows/tests.yml)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 架构
+一个面向企业 IT 运维场景的开源 AI Helpdesk 原型。系统接收文本或 JSON 工单，通过多个 Agent 完成问题分类、优先级与 SLA 评估、知识库检索和支持组路由，最终生成可供客服、工程师和系统使用的分诊报告。
+
+> 本项目用于技术验证和面试演示，不替代生产环境中的 ITSM、权限审批或安全响应流程。仓库中的工单与知识库均为合成演示数据。
+
+## 功能特性
+
+- 工单标准化：从门户、邮件、聊天或电话记录中抽取统一字段。
+- 多 Agent 分诊：分类、优先级/SLA、RAG 方案检索和路由建议分工协作。
+- 本地 RAG：基于 Chroma 和 BGE 中文 Embedding，检索知识库与历史工单。
+- 可靠输出：模型结果使用 `{"results": [...]}` 顶层结构，并经 Pydantic 校验和有限重试。
+- 交叉校验：识别分类与路由冲突，对不满足条件的 P1 自动降级并记录原因。
+- 多种入口：提供 Python CLI、轻量 Web UI 和可选 DeepSeek Harness workflow。
+- 可评测：内置知识库、历史工单、标注集、单元测试和评测脚本。
+
+## 系统架构
 
 ```mermaid
-flowchart TD
-    A[工单文本/JSON] --> B[工单解析与标准化]
-    B --> C1[问题分类]
-    B --> C2[优先级与 SLA]
-    B --> C3[解决方案 RAG]
-    B --> C4[路由建议]
+flowchart LR
+    A[文本或 JSON 工单] --> B[解析与标准化]
+    B --> C1[分类 Agent]
+    B --> C2[优先级/SLA Agent]
+    B --> C3[RAG 检索 Agent]
+    B --> C4[路由 Agent]
     C1 --> D[汇总与交叉校验]
     C2 --> D
     C3 --> D
     C4 --> D
-    D --> E[report.json + report.md]
+    D --> E[Markdown + JSON 报告]
 ```
 
-四路 Agent 的 JSON 输出都要求顶层为 `{"results": [...]}`，并经过 Pydantic 校验和最多三次重试。汇总层会检查分类-路由冲突，并对不满足影响面条件的 P1 自动降级。
+分类、优先级和检索在 Python 入口中并行执行；路由使用分类结果进行最终分派，汇总层负责冲突检查和报告生成。详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+## 技术栈
+
+Python 3.10+ · DeepSeek OpenAI-compatible API · Pydantic · PyYAML · Chroma · sentence-transformers/BGE · 原生 Python HTTP Server
 
 ## 快速开始
 
-先复制 `.env.example` 为 `.env`，然后填写自己的 DeepSeek key。`.env` 已被 Git 忽略，不会提交到仓库。
-
-PowerShell：
+### 1. 安装依赖
 
 ```powershell
-Copy-Item .env.example .env
-# 编辑 .env，填写 LLM_API_KEY
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
+```
+
+Linux/macOS：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
+```
+
+### 2. 配置 API Key
+
+复制 `.env.example` 为 `.env`，填写 `LLM_API_KEY`。密钥只从环境变量读取，`.env` 已被 Git 忽略，禁止提交真实密钥。
+
+首次使用本地 BGE 模型时需要联网下载模型。模型已缓存后，可设置以下变量离线运行：
+
+```powershell
+$env:HF_HUB_OFFLINE="1"
+$env:TRANSFORMERS_OFFLINE="1"
+```
+
+### 3. 建立 RAG 索引并运行 CLI
+
+```powershell
 python scripts/build_index.py
 python -m src.main --input data/raw/sample_ticket.txt
 ```
 
-启动本地 Web UI：
+报告会写入 `outputs/<ticket_id>/report.md` 和 `outputs/<ticket_id>/report.json`。未配置 API Key 时，LLM Agent 会返回经过约束的空结果，不会导致程序崩溃。
+
+### 4. 启动 Web UI
 
 ```powershell
 python ui/server.py 8787
 ```
 
-打开 <http://127.0.0.1:8787>。UI 支持固定字段录入、按用户隔离历史会话、历史工单搜索、RAG 方案查看和报告回读。
+浏览器打开 <http://127.0.0.1:8787>。UI 数据保存在本地 `ui/helpdesk.db`，该文件不会提交到仓库。此 UI 没有生产级认证和权限控制，请勿直接暴露到公网。
 
-Linux/macOS：
+## 评测与测试
 
 ```bash
-export LLM_API_KEY="你的 DeepSeek API Key"
-export HF_HUB_OFFLINE=1
-export TRANSFORMERS_OFFLINE=1
-python -m pip install -r requirements.txt
-python scripts/build_index.py
-python -m src.main --input data/raw/sample_ticket.txt
-```
-
-报告输出到 `outputs/<ticket_id>/report.json` 和 `outputs/<ticket_id>/report.md`。API key 只从 `LLM_API_KEY` 环境变量读取，不写入代码或配置文件。
-
-## RAG 与数据
-
-RAG 使用本地缓存的 BGE 中文模型 `BAAI/bge-small-zh-v1.5` 和 Chroma。配置中的 `embedding.provider` 为 `local`，不调用 OpenAI embedding；运行建库或检索前应设置两个离线变量，避免访问 huggingface.co：
-
-```powershell
-$env:HF_HUB_OFFLINE="1"; $env:TRANSFORMERS_OFFLINE="1"
-```
-
-当前语料包含 24 篇 KB 和 64 条历史工单，历史工单 8 个类别各 8 条，resolution 是针对具体问题的 3~5 步操作步骤。
-
-## 效果示例
-
-对 `data/raw/sample_ticket.txt`（"VPN 无法连接"）的真实报告片段：
-
-```text
-## 分诊结论
-- 分类：网络连接 / VPN连接问题（置信度 0.95）
-- 优先级：P3，SLA：8 小时
-- 路由：网络组
-
-## 相似解决方案
-- 来源：HIST-0009；标题：VPN 连接超时；相关度：高；步骤：确认客户端能访问 VPN 网关；校准系统时间并清理 VPN 缓存；切换到备用网关重试；导出客户端日志和错误时间交网络组
-- 来源：KB-0001；标题：VPN 客户端连接超时；相关度：高；步骤：确认本地网络可访问互联网；校准系统时间并重新登录；切换网络后重试；仍失败时收集客户端日志交网络组
-
-## 自动标签
-#网络连接 #VPN连接问题 #P3
-```
-
-## Phase 7 评测
-
-评测集位于 `data/annotated/helpdesk_eval.json`，共 32 条与历史工单不重复的工单，category 和 priority 均有 gold 标注。运行：
-
-```powershell
-$env:LLM_API_KEY="你的 DeepSeek API Key"
-$env:HF_HUB_OFFLINE="1"; $env:TRANSFORMERS_OFFLINE="1"
+python -m pytest tests -q
 python scripts/evaluate.py
 ```
 
-脚本计算分类准确率、优先级准确率和 RAG Top-3 命中率，并写入 `outputs/eval_result.json`。指标必须在配置有效的 `LLM_API_KEY` 环境下实际运行后再记录；没有 key 时脚本会写入 `status: not_run`，不会伪造数字。
+评测脚本读取 `data/annotated/helpdesk_eval.json`，计算分类准确率、优先级准确率和 RAG Top-3 命中率，并写入 `outputs/eval_result.json`。未配置 API Key 时会记录 `not_run`，不会生成虚构指标。
 
-当前开发环境未提交可复现的真实模型指标；运行评测脚本后，将 `outputs/eval_result.json` 中的结果填入发布说明。
+## 项目结构
 
-## 为什么使用多 Agent
-
-分类、SLA、检索和路由职责单一，可以并行提速并独立调优；汇总层再做交叉校验，尤其能降低 P1 误判和分类/路由不一致带来的分派错误。解决方案只展示 RAG 实际检索结果，检索不到时明确提示人工排查，不编造知识库内容。
-
-## Harness 编排（DSH workflow）
-
-项目提供两个等价的编排入口：
-
-1. **Python 版**（默认）：`src/main.py` 依次执行解析、分类、优先级、RAG 检索和路由，并通过统一报告层生成结果，生产可直接运行。
-2. **DSH workflow 版**：`workflow/helpdesk.workflow.js` 用 DeepSeek Harness 原生的 `parallel()` + subagent fan-out 编排同样的四路 Agent，展示「多智能体编排」的 Harness 实现。
-
-DSH 版在 workflow 工具中运行：`meta` 填项目信息、`args.ticket` 传工单文本、`script` 填 `workflow/helpdesk.workflow.js` 的内容。每个 subagent 用 JSON Schema 校验输出，与 Python 版的数据契约一致；解决方案由 subagent 读取 `data/knowledge` 与 `data/tickets` 语料检索（生产级 RAG 用 Chroma+BGE 见 `src/rag/vector_store.py`）。
-
-## 测试
-
-```powershell
-python -m pytest tests -q
+```text
+.
+├── .github/workflows/       # GitHub Actions 持续集成
+├── config/                 # 模型、Embedding、RAG 和业务配置
+├── data/
+│   ├── raw/                # 输入样例
+│   ├── knowledge/          # 合成 KB 文章
+│   ├── tickets/            # 合成历史工单；index/ 为生成目录
+│   └── annotated/          # 合成评测集与 gold 标注
+├── docs/                   # 架构文档
+├── scripts/                # 建库、造数和评测脚本
+├── src/
+│   ├── agents/             # 分类、优先级、检索和路由 Agent
+│   ├── rag/                # 向量库封装
+│   ├── ticket_parser.py    # 工单解析
+│   ├── report.py           # 汇总、校验和报告生成
+│   └── main.py             # CLI 入口
+├── tests/                  # 自动化测试
+├── ui/                     # 本地 Web UI 与服务端
+├── workflow/               # 可选 DeepSeek Harness 编排
+├── CONTRIBUTING.md
+├── LICENSE
+└── requirements*.txt
 ```
 
-## GitHub 发布清单
+`legacy_contract_review/` 是历史合同审查项目的只读归档，不属于当前运行链路，当前项目不会 import 它。
 
-- 提交 `.env.example`，不要提交 `.env`、`ui/helpdesk.db`、`outputs/` 或 `data/tickets/index/`。
-- 在 GitHub Actions 或本机设置 `LLM_API_KEY`，不要把 key 写入 YAML、README 或源码。
-- 首次运行前设置 `HF_HUB_OFFLINE=1` 和 `TRANSFORMERS_OFFLINE=1`，确保使用本地缓存的 BGE 模型。
-- `legacy_contract_review/` 是历史合同项目归档，仅保留作迁移参考，运行代码不会 import 它。
+## 配置说明
+
+业务类别、支持组、SLA 时限、模型名、Embedding provider 和索引路径均位于 [`config/config.yaml`](config/config.yaml)。API Key 通过 `LLM_API_KEY` 环境变量提供。
+
+## 开源协作
+
+欢迎提交 Issue 和 Pull Request。提交代码前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，并确保测试通过。项目采用 [MIT License](LICENSE)。
+
+## 已知限制
+
+- 本地 BGE 模型首次下载和 Chroma 建库需要一定磁盘空间与时间。
+- 默认 UI 仅监听 `127.0.0.1`，不包含生产级认证、审计和多租户隔离。
+- 评测指标需在配置有效的 API Key 下实际运行后再用于对外宣传。
