@@ -1,5 +1,6 @@
 """Generate a fresh, non-overlapping 32-ticket gold evaluation set."""
 from __future__ import annotations
+
 import json
 from pathlib import Path
 

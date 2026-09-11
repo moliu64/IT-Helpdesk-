@@ -1,0 +1,9 @@
+.git
+.env
+.venv
+__pycache__
+*.py[cod]
+outputs
+data/tickets/index
+data/knowledge/imports
+ui/helpdesk.db

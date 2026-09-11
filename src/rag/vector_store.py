@@ -1,9 +1,11 @@
 """Chroma vector store backed exclusively by a local BGE model."""
 from __future__ import annotations
+
 import json
 import threading
 from pathlib import Path
 from typing import Any
+
 from src.llm_client import ROOT, load_config
 
 COLLECTION = "helpdesk_solutions"
@@ -27,6 +29,13 @@ def load_documents(root: Path = ROOT) -> list[dict[str, Any]]:
             ] or [ticket["resolution"]]
             documents.append({"id": ticket["ticket_id"], "text": text, "source": ticket["ticket_id"],
                               "title": ticket["title"], "steps": resolution_steps})
+    # Imported files use the same document contract as built-in KB articles.
+    from src.rag.ingest import SUPPORTED, documents_from_file
+    imports = root / "data" / "knowledge" / "imports"
+    if imports.exists():
+        for path in sorted(imports.iterdir()):
+            if path.is_file() and path.suffix.lower() in SUPPORTED:
+                documents.extend(documents_from_file(path))
     return documents
 
 class LocalBGEEmbeddingFunction:
@@ -87,7 +96,7 @@ class VectorStore:
         matches = []
         metadatas = result.get("metadatas", [[]])[0]
         distances = result.get("distances", [[]])[0]
-        for metadata, distance in zip(metadatas, distances):
+        for metadata, distance in zip(metadatas, distances, strict=False):
             relevance = "高" if distance <= 0.3 else "中" if distance <= 0.6 else "低"
             matches.append({"source": metadata["source"], "title": metadata["title"],
                             "steps": json.loads(metadata["steps_json"]), "relevance": relevance})

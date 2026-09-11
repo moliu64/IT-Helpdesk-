@@ -1,8 +1,11 @@
 """Helpdesk ticket classification with schema validation and retries."""
 from __future__ import annotations
+
 import logging
 from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
 from src.agents.prompts import classify_messages
 from src.llm_client import LLMClient, load_config
 

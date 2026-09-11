@@ -15,7 +15,7 @@
 - 本地 RAG：基于 Chroma 和 BGE 中文 Embedding，检索知识库与历史工单。
 - 可靠输出：模型结果使用 `{"results": [...]}` 顶层结构，并经 Pydantic 校验和有限重试。
 - 交叉校验：识别分类与路由冲突，对不满足条件的 P1 自动降级并记录原因。
-- 多种入口：提供 Python CLI、轻量 Web UI 和可选 DeepSeek Harness workflow。
+- 多种入口：提供 Python CLI、对话 UI、后端监视/RAG 管理页和可选编排层。
 - 可评测：内置知识库、历史工单、标注集、单元测试和评测脚本。
 
 ## 系统架构
@@ -83,15 +83,20 @@ python -m src.main --input data/raw/sample_ticket.txt
 ### 4. 启动 Web UI
 
 ```powershell
-python ui/server.py 8787
+./start.ps1
 ```
 
-浏览器打开 <http://127.0.0.1:8787>。UI 数据保存在本地 `ui/helpdesk.db`，该文件不会提交到仓库。此 UI 没有生产级认证和权限控制，请勿直接暴露到公网。
+Windows 也可以双击 `start.bat`；Linux/macOS 使用 `./start.sh`。首次运行会自动创建 `.venv` 并安装运行依赖。浏览器打开 <http://127.0.0.1:8787>。后端监视与 RAG 管理位于 <http://127.0.0.1:8787/backend>，可导入 PDF、DOCX、MD、TXT 后重建本地索引。也可以单独启动后端监视页：Windows 双击 `start_backend.bat`（或执行 `./start_backend.ps1`），Linux/macOS 执行 `./start_backend.sh`，默认访问 <http://127.0.0.1:8788/backend>。导入文本按 900 字符切分，固定保留 15% 上下文重叠。UI 数据保存在本地 `ui/helpdesk.db`，上传文件位于 `data/knowledge/imports/`；二者均不会提交到仓库。此 UI 没有生产级认证和权限控制，请勿直接暴露到公网。
+
+### 5. 在线部署
+
+构建命令使用 `python -m pip install -r requirements.txt`，启动命令使用 `python scripts/start.py`。平台通常会注入 `PORT`；应用会读取它，线上建议设置 `HELPDESK_HOST=0.0.0.0`。健康检查地址为 `/healthz`。线上必须配置 `LLM_API_KEY`，不要上传 `.env`、SQLite 数据库或本地向量索引。正式上线前请在网关增加 HTTPS、认证和请求限流。
 
 ## 评测与测试
 
 ```bash
 python -m pytest tests -q
+python -m ruff check src scripts tests ui
 python scripts/evaluate.py
 ```
 
@@ -110,8 +115,11 @@ python scripts/evaluate.py
 │   └── annotated/          # 合成评测集与 gold 标注
 ├── docs/                   # 架构文档
 ├── scripts/                # 建库、造数和评测脚本
+│   └── start.py             # 跨平台 Web 启动入口
 ├── src/
 │   ├── agents/             # 分类、优先级、检索和路由 Agent
+│   ├── agent_graph.py       # 可选 LangGraph / Python 回退编排
+│   ├── intent.py            # 对话意图识别与分流
 │   ├── rag/                # 向量库封装
 │   ├── ticket_parser.py    # 工单解析
 │   ├── report.py           # 汇总、校验和报告生成
@@ -124,11 +132,15 @@ python scripts/evaluate.py
 └── requirements*.txt
 ```
 
+仓库根目录的 `start.bat`、`start.ps1` 和 `start.sh` 都调用同一个 `scripts/start.py`，避免不同平台维护多套启动逻辑。
+
 `legacy_contract_review/` 是历史合同审查项目的只读归档，不属于当前运行链路，当前项目不会 import 它。
 
 ## 配置说明
 
 业务类别、支持组、SLA 时限、模型名、Embedding provider 和索引路径均位于 [`config/config.yaml`](config/config.yaml)。API Key 通过 `LLM_API_KEY` 环境变量提供。
+
+视觉理解模型通过 `LLM_VISION_MODEL` 配置，默认值为 `DeepSeek-V4-Flash-Vision-Exp`。不要将密钥写入配置、测试数据或文档。
 
 ## 开源协作
 

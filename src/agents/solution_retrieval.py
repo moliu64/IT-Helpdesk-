@@ -1,8 +1,11 @@
 """Retrieve solutions exclusively from the local RAG index."""
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
 
 class SolutionMatch(BaseModel):
     model_config = ConfigDict(extra="forbid")

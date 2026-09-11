@@ -1,6 +1,7 @@
-import json
 from pathlib import Path
+
 from src.report import build_report
+
 
 def test_report_conflicts_and_outputs(tmp_path: Path):
     ticket = {"ticket_id": "T-001", "requester": "张三", "title": "VPN 连接失败", "description": "全员无法连接", "channel": "portal", "created_at": ""}

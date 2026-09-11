@@ -6,6 +6,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any
+
 import yaml
 
 try:
@@ -37,6 +38,7 @@ class LLMClient:
         cfg = (config or load_config()).get("llm", {})
         self.base_url = os.getenv("LLM_BASE_URL", cfg.get("base_url", "https://api.deepseek.com/v1"))
         self.model = os.getenv("LLM_MODEL", cfg.get("model", "deepseek-chat"))
+        self.vision_model = os.getenv("LLM_VISION_MODEL", cfg.get("vision_model", "DeepSeek-V4-Flash-Vision-Exp"))
         self.temperature = float(os.getenv("LLM_TEMPERATURE", cfg.get("temperature", 0.1)))
         self.api_key = os.getenv(cfg.get("api_key_env", "LLM_API_KEY"), "")
         self._client = client

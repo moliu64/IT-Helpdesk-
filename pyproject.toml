@@ -27,6 +27,23 @@ Issues = "https://github.com/moliu64/IT-Helpdesk-/issues"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = ["legacy_contract_review", "outputs", "data/tickets/index"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# These entry points intentionally add the repository root before importing src.
+"scripts/*.py" = ["E402"]
+"ui/server.py" = ["E402"]
+# The report builder contains compact markdown assembly expressions by design.
+"src/report.py" = ["E701"]
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }

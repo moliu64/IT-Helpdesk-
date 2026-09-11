@@ -1,9 +1,9 @@
 """Evaluate classification, priority, and local-RAG top-3 hit rate."""
 from __future__ import annotations
+
 import json
 import os
 import sys
-from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +14,7 @@ from src.agents.classify import classify_ticket
 from src.agents.priority import assess_priority
 from src.agents.solution_retrieval import retrieve_solutions
 from src.ticket_parser import parse_ticket
+
 
 def evaluate() -> dict:
     output = ROOT / "outputs" / "eval_result.json"

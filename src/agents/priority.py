@@ -1,8 +1,11 @@
 """Ticket priority and SLA assessment."""
 from __future__ import annotations
+
 import logging
 from typing import Any, Literal
+
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
 from src.agents.prompts import priority_messages
 from src.llm_client import LLMClient, load_config
 

@@ -1,5 +1,6 @@
 """Central prompt definitions for Helpdesk agents."""
 from __future__ import annotations
+
 import json
 
 CLASSIFY_SYSTEM = """你是 IT Helpdesk 工单分类器。只能从提供的 categories 中选择 category。

@@ -1,5 +1,8 @@
 outputs/
+output/
+.playwright-cli/
 data/tickets/index/
+data/knowledge/imports/
 __pycache__/
 *.py[cod]
 .venv/
@@ -8,6 +11,7 @@ venv/
 .ruff_cache/
 .pytest_cache/
 ui/helpdesk.db
+ui/skills/
 .env
 .env.local
 .pytest-*/

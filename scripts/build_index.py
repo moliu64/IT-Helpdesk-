@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
 
 from src.rag.vector_store import VectorStore, load_documents
 
+
 def main() -> None:
     documents = load_documents()
     if not documents:

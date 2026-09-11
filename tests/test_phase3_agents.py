@@ -1,8 +1,10 @@
 from types import SimpleNamespace
+
 from src.agents.priority import PriorityResult, assess_priority
 from src.agents.routing import RoutingResult, recommend_route
 from src.agents.solution_retrieval import SolutionResult, retrieve_solutions
 from src.llm_client import LLMClient, load_config
+
 
 class FakeCompletions:
     def __init__(self, contents): self.contents, self.calls = iter(contents), 0

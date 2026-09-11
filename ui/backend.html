@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Helpdesk 后端监视</title>
+  <style>
+    :root { --nav:#142431; --line:#dbe3e7; --blue:#1268a5; --muted:#71808a; }
+    body { margin:0; background:#f3f6f8; color:#17232c; font:14px system-ui,"Microsoft YaHei"; }
+    .top { height:60px; display:flex; align-items:center; justify-content:space-between; padding:0 28px; background:var(--nav); color:#fff; }
+    .top a { color:#b9d5e5; text-decoration:none; }
+    .wrap { max-width:1100px; margin:auto; padding:22px; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+    input,select,button { padding:9px; border:1px solid #d3dfe5; border-radius:6px; background:#fff; }
+    .toolbar select { min-width:360px; flex:1; }
+    button { border:0; background:var(--blue); color:#fff; cursor:pointer; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .card { padding:16px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .rag { grid-column:1 / -1; }
+    h2 { margin:0 0 12px; font-size:14px; }
+    .node,.file { display:flex; justify-content:space-between; padding:9px; border-bottom:1px solid #eef2f4; }
+    .graph-canvas { position:relative; min-height:320px; padding:14px; border:1px solid var(--line); border-radius:8px; background:transparent; overflow:hidden; }
+    .graph-lines { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+    .graph-lines > path { fill:none; stroke:#c7d2d8; stroke-width:1.15; stroke-linecap:round; stroke-linejoin:round; marker-end:url(#arrow-gray); }
+    .graph-lines > path.connected { stroke:#36a879; marker-end:url(#arrow-green); }
+    .graph-lines > path.active { stroke:#36a879; stroke-dasharray:4 5; marker-end:url(#arrow-green); animation:edge-flow 0.9s linear infinite; }
+    .graph-lines > path.blocked { stroke:#d25c5c; stroke-dasharray:3 4; marker-end:url(#arrow-red); }
+    @keyframes edge-flow { to { stroke-dashoffset:-18; } }
+    .graph-node { position:absolute; width:clamp(88px,18%,122px); min-height:54px; padding:9px 11px; box-sizing:border-box; border:1px solid #b9c8ce; border-radius:9px; background:rgba(255,255,255,.16); box-shadow:none; }
+    .graph-node b,.graph-node small { display:block; }
+    .graph-node small { margin-top:4px; color:var(--muted); }
+    .graph-node.completed { border-color:#62b995; background:rgba(54,168,121,.08); }
+    .graph-node.running { border-color:#d7944f; background:rgba(215,148,79,.08); }
+    .graph-node.error { border-color:#d25c5c; background:rgba(210,92,92,.08); }
+    .graph-node.pending { color:var(--muted); }
+    .n-parse { left:2%; top:42%; }
+    .n-classify { left:28%; top:7%; }
+    .n-priority { left:28%; top:42%; }
+    .n-solution { left:28%; top:77%; }
+    .n-routing { left:53%; top:7%; }
+    .n-aggregate { right:2%; top:42%; }
+    .rag-status { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    .metric { padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:#f8fafb; font-size:12px; }
+    .file { align-items:center; gap:10px; }
+    .file span:first-child { min-width:0; overflow-wrap:anywhere; }
+    .delete-file { background:#fff; color:#a54141; border:1px solid #e3c5c5; padding:6px 9px; }
+    .ok { color:#2b8c6b; } .run { color:#d17b22; } .err { color:#b44b4b; }
+    .muted { color:var(--muted); font-size:12px; }
+    .search-row { display:flex; gap:8px; margin:10px 0; }
+    .search-row input { flex:1; min-width:0; }
+    .doc-list,.audit-list { max-height:330px; overflow:auto; border-top:1px solid #eef2f4; }
+    .doc-item,.audit-item { padding:10px 0; border-bottom:1px solid #eef2f4; }
+    .doc-item strong,.audit-item strong { display:block; }
+    .doc-item small,.audit-item small { display:block; margin-top:4px; color:var(--muted); line-height:1.45; }
+    .audit-user { cursor:pointer; }
+    @media (max-width:760px) { .grid { grid-template-columns:1fr; } .rag { grid-column:auto; } }
+    @media (max-width:560px) { .graph-canvas { min-height:340px; } .graph-node { padding:8px; font-size:11px; } .graph-node small { font-size:10px; } }
+  </style>
+</head>
+<body>
+  <header class="top"><b>HELPDESK / 后端监视</b><a href="/">返回对话</a></header>
+  <main class="wrap">
+    <div class="toolbar">
+      <select id="run"><option value="">暂无运行记录</option></select>
+      <button id="load">刷新运行状态</button>
+    </div>
+    <div class="grid">
+      <section class="card"><h2>LangGraph 流程图</h2><div id="graph" class="graph-canvas"><svg class="graph-lines" viewBox="0 0 100 100" preserveAspectRatio="none"><defs><marker id="arrow-gray" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#c7d2d8"></path></marker><marker id="arrow-green" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#36a879"></path></marker><marker id="arrow-red" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#d25c5c"></path></marker></defs><path id="edge-parse-classify" d="M23 50 L28 25"></path><path id="edge-parse-priority" d="M23 50 L28 50"></path><path id="edge-parse-solution" d="M23 50 L28 82"></path><path id="edge-classify-routing" d="M47 18 L53 18"></path><path id="edge-priority-aggregate" d="M48 53 L78 53"></path><path id="edge-solution-aggregate" d="M48 82 L78 53"></path><path id="edge-routing-aggregate" d="M72 25 L78 42"></path></svg><div id="nodes"></div></div></section>
+      <section class="card"><h2>事件日志</h2><div id="events" class="muted">暂无数据</div></section>
+      <section class="card rag">
+        <h2>RAG 库管理</h2>
+        <p class="muted">支持 PDF、Word（DOCX）、Markdown、TXT；文本按 15% 上下文重叠切分。</p>
+        <input id="file" type="file" accept=".pdf,.docx,.md,.txt">
+        <button id="upload">上传文件</button>
+        <button id="rebuild">重建索引</button>
+        <span id="message" class="muted"></span>
+        <div id="ragStatus" class="rag-status"></div>
+        <div id="files">加载中…</div>
+        <button id="viewDocs" aria-expanded="false">查看库内文档</button>
+        <div id="ragDocs" class="doc-list muted" hidden>点击查看知识库与历史工单文档</div>
+        <div class="search-row"><input id="ragQuery" placeholder="输入问题检索知识库和历史工单"><button id="ragSearch">检索</button></div>
+        <div id="ragResults" class="doc-list muted">输入问题后查看 Top-5 匹配结果</div>
+      </section>
+      <section class="card"><h2>用户访问记录</h2><p class="muted">按用户聚合查看最近访问次数、会话数和最后活动时间。</p><div id="auditUsers" class="audit-list">加载中…</div><div class="search-row"><input id="auditUser" placeholder="可选：按用户筛选明细"><button id="auditSearch">查看记录</button></div><div id="auditLogs" class="audit-list muted">选择用户后查看访问明细</div></section>
+    </div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+    const labels = { parse:"解析", classify:"分类", priority:"优先级 / SLA", solution_retrieval:"RAG 检索", routing:"路由", aggregate:"汇总" };
+    const edgeMap = {"edge-parse-classify":["parse","classify"],"edge-parse-priority":["parse","priority"],"edge-parse-solution":["parse","solution_retrieval"],"edge-classify-routing":["classify","routing"],"edge-priority-aggregate":["priority","aggregate"],"edge-solution-aggregate":["solution_retrieval","aggregate"],"edge-routing-aggregate":["routing","aggregate"]};
+    function renderEdges(events = []) {
+      const latest = {}; events.forEach((event) => { latest[event.node] = event; });
+      Object.entries(edgeMap).forEach(([edge, [from, to]]) => {
+        const path = document.getElementById(edge); if (!path) return;
+        path.classList.remove("connected", "active", "blocked");
+        const fromStatus = latest[from]?.status, toStatus = latest[to]?.status;
+        if (fromStatus === "error" || toStatus === "error") path.classList.add("blocked");
+        else if (fromStatus === "running" || toStatus === "running") path.classList.add("active");
+        else if (fromStatus === "completed" && toStatus === "completed") path.classList.add("connected");
+      });
+    }
+    function renderNodes(events = []) {
+      const latest = {}; events.forEach((event) => { latest[event.node] = event; });
+      const positions = {parse:"n-parse",classify:"n-classify",priority:"n-priority",solution_retrieval:"n-solution",routing:"n-routing",aggregate:"n-aggregate"};
+      $("nodes").innerHTML = Object.entries(labels).map(([key, label]) => {
+        const event = latest[key] || {status:"pending"};
+        const text = event.status === "pending" ? "待运行" : event.status;
+        return `<div class="graph-node ${positions[key]} ${esc(event.status)}"><b>${label}</b><small>${esc(text)}${event.result_count != null ? ` · ${event.result_count} 条` : ""}</small></div>`;
+      }).join("");
+      renderEdges(events);
+    }
+    async function refreshRuns(selectLatest = false) {
+      const runs = await fetch("/api/backend/runs").then((response) => response.json());
+      const previous = $("run").value;
+      $("run").innerHTML = runs.length ? runs.map((run) => `<option value="${encodeURIComponent(run.user_id)}|${encodeURIComponent(run.session_id)}">${esc(run.updated_at)} · ${esc(run.user_id)} · ${esc(run.session_id.slice(0, 24))} · ${run.event_count} events</option>`).join("") : '<option value="">暂无运行记录</option>';
+      if (!selectLatest && previous && [...$("run").options].some((option) => option.value === previous)) $("run").value = previous;
+      if ($("run").value) await loadTrace();
+    }
+    async function loadTrace() {
+      const selected = $("run").value;
+      if (!selected) { renderNodes(); renderEdges(); $("events").textContent = "暂无运行数据"; return; }
+      const [user, session] = selected.split("|").map(decodeURIComponent);
+      const events = await fetch(`/api/trace?user_id=${encodeURIComponent(user)}&session_id=${encodeURIComponent(session)}`).then((r) => r.json());
+      renderNodes(events);
+      $("events").innerHTML = events.length ? events.map((event) => `<div class="node"><span>${esc(labels[event.node] || event.node)}</span><span class="muted">${esc(event.status)} · ${esc(event.timestamp || "")}</span></div>`).join("") : "暂无数据";
+    }
+    async function refreshFiles() {
+      const [files, status] = await Promise.all([fetch("/api/rag/files").then((r) => r.json()), fetch("/api/rag/status").then((r) => r.json())]);
+      $("ragStatus").innerHTML = `<span class="metric">索引：${status.ready ? "就绪" : "未构建"}</span><span class="metric">源文档：${status.source_documents}</span><span class="metric">已索引：${status.indexed_documents}</span>`;
+      $("files").innerHTML = files.length ? files.map((file) => `<div class="file"><span>${esc(file.name)} <small class="muted">${file.size} bytes</small></span><button class="delete-file" data-file="${esc(file.name)}">删除</button></div>`).join("") : "暂无导入文件，可上传文档后重建索引";
+      document.querySelectorAll("[data-file]").forEach((button) => { button.onclick = async () => { if (!confirm(`删除 ${button.dataset.file}？`)) return; const response = await fetch(`/api/rag/files?name=${encodeURIComponent(button.dataset.file)}`, {method:"DELETE"}); $("message").textContent = response.ok ? "文件已删除，请重建索引。" : "删除失败。"; refreshFiles(); }; });
+    }
+    async function searchRag() {
+      const query = $("ragQuery").value.trim(); if (!query) return;
+      $("ragResults").textContent = "检索中…";
+      const response = await fetch("/api/rag/search", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({query})});
+      const data = await response.json();
+      $("ragResults").innerHTML = response.ok && data.matches.length ? data.matches.map((match) => `<div class="doc-item"><strong>${esc(match.source)} · ${esc(match.title)}</strong><small>相关度：${esc(match.relevance)}</small><small>${match.steps.map((step, index) => `${index + 1}. ${esc(step)}`).join("<br>")}</small></div>`).join("") : `未找到匹配内容：${esc(data.error || "建议调整关键词")}`;
+    }
+    async function viewDocs() {
+      $("ragDocs").hidden = false;
+      $("viewDocs").setAttribute("aria-expanded", "true");
+      $("viewDocs").textContent = "隐藏库内文档";
+      $("ragDocs").textContent = "加载中…";
+      const response = await fetch("/api/rag/documents");
+      const documents = await response.json();
+      $("ragDocs").innerHTML = response.ok && documents.length ? documents.map((doc) => `<div class="doc-item"><strong>${esc(doc.source)} · ${esc(doc.title)}</strong><small>${esc(doc.preview)}</small><small>步骤：${doc.steps.length ? doc.steps.map((step, index) => `${index + 1}. ${esc(step)}`).join("；") : "未提取"}</small></div>`).join("") : "暂无库内文档";
+    }
+    async function refreshAudit(userId = "") {
+      const [users, logs] = await Promise.all([fetch("/api/audit/users").then((r) => r.json()), fetch(`/api/audit/logs?user_id=${encodeURIComponent(userId)}`).then((r) => r.json())]);
+      $("auditUsers").innerHTML = users.length ? users.map((user) => `<div class="audit-item audit-user" data-user="${esc(user.user_id)}"><strong>${esc(user.user_id)}</strong><small>${user.access_count} 次访问 · ${user.sessions} 个会话 · 最后活动 ${esc(user.last_seen)}</small></div>`).join("") : "暂无已识别用户访问记录";
+      $("auditLogs").innerHTML = logs.length ? logs.map((log) => `<div class="audit-item"><strong>${esc(log.method)} ${esc(log.path)}</strong><small>${esc(log.user_id)} · ${esc(log.session_id || "无会话")} · ${esc(log.created_at)}</small></div>`).join("") : "暂无访问明细";
+      document.querySelectorAll("[data-user]").forEach((item) => { item.onclick = () => { $("auditUser").value = item.dataset.user; refreshAudit(item.dataset.user); }; });
+    }
+    $("load").onclick = () => refreshRuns(false);
+    $("run").onchange = loadTrace;
+    $("upload").onclick = async () => {
+      const file = $("file").files[0]; if (!file) return;
+      $("message").textContent = "上传中…";
+      const content = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(",")[1]); reader.readAsDataURL(file); });
+      const response = await fetch("/api/rag/import", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ name:file.name, content_base64:content }) });
+      $("message").textContent = response.ok ? "上传成功，请重建索引。" : "上传失败。"; refreshFiles();
+    };
+    $("rebuild").onclick = async () => { $("message").textContent = "重建中…"; const data = await fetch("/api/rag/rebuild", { method:"POST", headers:{"Content-Type":"application/json"}, body:"{}" }).then((r) => r.json()); $("message").textContent = data.count ? `索引已更新，共 ${data.count} 条。` : `重建失败：${data.error || "未知错误"}`; };
+    $("ragSearch").onclick = searchRag;
+    $("ragQuery").onkeydown = (event) => { if (event.key === "Enter") searchRag(); };
+    $("viewDocs").onclick = () => {
+      const docs = $("ragDocs"), expanded = !docs.hidden;
+      if (expanded) { docs.hidden = true; $("viewDocs").setAttribute("aria-expanded", "false"); $("viewDocs").textContent = "查看库内文档"; }
+      else viewDocs();
+    };
+    $("auditSearch").onclick = () => refreshAudit($("auditUser").value.trim());
+    renderNodes(); renderEdges(); refreshRuns(true); refreshFiles(); refreshAudit();
+    setInterval(() => refreshRuns(false), 5000);
+  </script>
+</body>
+</html>

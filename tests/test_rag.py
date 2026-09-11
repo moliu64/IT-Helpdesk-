@@ -1,6 +1,6 @@
-from collections import Counter
 from src.agents.solution_retrieval import SolutionResult, retrieve_solutions
 from src.rag.vector_store import load_documents
+
 
 class FakeStore:
     def search(self, query, top_k=3):

@@ -1,9 +1,12 @@
 """Reducer for Helpdesk triage results and human-readable reports."""
 from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Any
+
 from src.llm_client import ROOT, load_config
+
 
 def _first(payload: dict[str, Any]) -> dict[str, Any]:
     values = payload.get("results", []) if isinstance(payload, dict) else []

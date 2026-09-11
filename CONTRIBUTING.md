@@ -17,7 +17,8 @@ python -m pip install -r requirements-dev.txt
 1. 从 `main` 创建功能分支，并在提交信息中清楚描述变更。
 2. 新功能补充测试；涉及数据契约时同步更新文档和测试样例。
 3. 运行 `python -m pytest tests -q`，确认本地测试通过。
-4. 提交 Pull Request，说明背景、实现方式、验证结果和已知限制。
+4. 运行 `python -m ruff check src scripts tests ui`，确认无新增 lint 错误。
+5. 提交 Pull Request，说明背景、实现方式、验证结果和已知限制。
 
 ## 代码约定
 

@@ -1,6 +1,8 @@
 from types import SimpleNamespace
+
 from src.agents.classify import ClassificationResult, classify_ticket
 from src.llm_client import LLMClient, load_config
+
 
 class FakeCompletions:
     def __init__(self, contents):

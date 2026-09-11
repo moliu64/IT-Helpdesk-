@@ -1,8 +1,11 @@
 """Ticket support-team routing."""
 from __future__ import annotations
+
 import logging
 from typing import Any
+
 from pydantic import BaseModel, ConfigDict, ValidationError
+
 from src.agents.prompts import routing_messages
 from src.llm_client import LLMClient, load_config
 
