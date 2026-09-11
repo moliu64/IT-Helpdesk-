@@ -1,0 +1,17 @@
+[Unit]
+Description=IT 运维工单 Helpdesk 智能体
+After=network.target
+
+[Service]
+Type=simple
+User=helpdesk
+WorkingDirectory=/opt/it-helpdesk
+EnvironmentFile=/opt/it-helpdesk/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/it-helpdesk/.venv/bin/python /opt/it-helpdesk/scripts/start.py --host 127.0.0.1 --port 8787
+Restart=always
+RestartSec=5
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

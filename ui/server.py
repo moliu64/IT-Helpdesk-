@@ -390,7 +390,7 @@ class Handler(BaseHTTPRequestHandler):
             html = html.replace('</style>', '.ticket-action{display:block;margin-top:10px;border:0;border-radius:6px;padding:8px 12px;background:#1268a5;color:#fff;cursor:pointer}.ticket-modal{position:fixed;inset:0;background:#0e1b24aa;display:none;place-items:center;z-index:10}.ticket-modal.open{display:grid}.ticket-card{width:min(520px,92%);background:#fff;border-radius:9px;padding:20px}.ticket-card input,.ticket-card textarea,.ticket-card select{width:100%;margin:6px 0 10px;padding:10px;border:1px solid #dbe3e7;border-radius:6px;font:inherit}.ticket-card .ticket-contact{background:#f1f3f5;color:#596771;border-color:#d8dee2}.ticket-card .ticket-contact::placeholder{color:#87939b}.ticket-card textarea{min-height:130px}.ticket-card button{padding:9px 14px;border:0;border-radius:6px;margin-right:8px;cursor:pointer}.ticket-primary{background:#1268a5;color:#fff}.ticket-card p{font-size:12px;color:#71808a}\n</style>', 1)
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
-        if route in ("/backend", "/backend.html"):
+        if route in ("/backend", "/backend.html", "/admin", "/admin.html"):
             self._send(200, BACKEND_INDEX.read_bytes(), "text/html; charset=utf-8")
             return
         from urllib.parse import parse_qs, urlparse
