@@ -88,6 +88,8 @@ python -m src.main --input data/raw/sample_ticket.txt
 
 Windows 也可以双击 `start.bat`；Linux/macOS 使用 `./start.sh`。首次运行会自动创建 `.venv` 并安装运行依赖。浏览器打开 <http://127.0.0.1:8787>。后端监视与 RAG 管理位于 <http://127.0.0.1:8787/backend>，可导入 PDF、DOCX、MD、TXT 后重建本地索引。也可以单独启动后端监视页：Windows 双击 `start_backend.bat`（或执行 `./start_backend.ps1`），Linux/macOS 执行 `./start_backend.sh`，默认访问 <http://127.0.0.1:8788/backend>。导入文本按 900 字符切分，固定保留 15% 上下文重叠。UI 数据保存在本地 `ui/helpdesk.db`，上传文件位于 `data/knowledge/imports/`；二者均不会提交到仓库。此 UI 没有生产级认证和权限控制，请勿直接暴露到公网。
 
+后端页面的“工单管理”区会汇总所有用户已提交工单，并显示分类、优先级、路由和描述。运维人员可以按工单号、标题、用户或描述搜索，也可以按“未解决 / 已解决”筛选；更新状态时填写处理备注（例如复现结果、采取的措施、回访结论），系统会保存状态更新时间并同步到该工单的报告数据，便于后续统计完成量和复盘处理过程。
+
 ### 5. 在线部署
 
 构建命令使用 `python -m pip install -r requirements.txt`，启动命令使用 `python scripts/start.py`。平台通常会注入 `PORT`；应用会读取它，线上建议设置 `HELPDESK_HOST=0.0.0.0`。健康检查地址为 `/healthz`。线上必须配置 `LLM_API_KEY`，不要上传 `.env`、SQLite 数据库或本地向量索引。正式上线前请在网关增加 HTTPS、认证和请求限流。

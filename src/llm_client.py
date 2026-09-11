@@ -46,6 +46,7 @@ class LLMClient:
             self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def json_completion(self, messages: list[dict[str, str]], retries: int = 3) -> Any:
+        retries = max(1, int(retries))
         last_error = None
         for attempt in range(retries):
             try:

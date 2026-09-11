@@ -53,6 +53,24 @@
     .doc-item strong,.audit-item strong { display:block; }
     .doc-item small,.audit-item small { display:block; margin-top:4px; color:var(--muted); line-height:1.45; }
     .audit-user { cursor:pointer; }
+    .tickets { grid-column:1 / -1; }
+    .ticket-toolbar { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 12px; }
+    .ticket-toolbar input { flex:1; min-width:220px; }
+    .ticket-stats { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+    .ticket-stat { padding:8px 11px; border:1px solid var(--line); border-radius:7px; background:#f8fafb; font-size:12px; }
+    .ticket-list { max-height:520px; overflow:auto; border-top:1px solid #eef2f4; }
+    .ticket-item { padding:13px 0; border-bottom:1px solid #eef2f4; }
+    .ticket-main { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .ticket-main strong { display:block; font-size:13px; }
+    .ticket-meta { color:var(--muted); font-size:11px; margin-top:5px; line-height:1.6; }
+    .ticket-description { color:#465963; font-size:12px; margin:7px 0; white-space:pre-wrap; }
+    .ticket-status { border-radius:999px; padding:4px 9px; font-size:11px; white-space:nowrap; }
+    .ticket-status.resolved { color:#247d5b; background:#e8f7f0; }
+    .ticket-status.unresolved { color:#a56320; background:#fff2df; }
+    .ticket-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .ticket-actions select { min-width:110px; }
+    .ticket-actions input { flex:1; min-width:220px; }
+    .ticket-actions button { padding:7px 10px; }
     @media (max-width:760px) { .grid { grid-template-columns:1fr; } .rag { grid-column:auto; } }
     @media (max-width:560px) { .graph-canvas { min-height:340px; } .graph-node { padding:8px; font-size:11px; } .graph-node small { font-size:10px; } }
   </style>
@@ -65,6 +83,17 @@
       <button id="load">刷新运行状态</button>
     </div>
     <div class="grid">
+      <section class="card tickets">
+        <h2>工单管理</h2>
+        <p class="muted">查看用户已提交工单，更新处理状态并记录完成备注，便于后续统计。</p>
+        <div id="ticketStats" class="ticket-stats"></div>
+        <div class="ticket-toolbar">
+          <select id="ticketStatus"><option value="all">全部状态</option><option value="unresolved">未解决</option><option value="resolved">已解决</option></select>
+          <input id="ticketQuery" placeholder="搜索工单号、标题、用户或描述">
+          <button id="ticketRefresh">刷新工单</button>
+        </div>
+        <div id="ticketList" class="ticket-list">加载中…</div>
+      </section>
       <section class="card"><h2>LangGraph 流程图</h2><div id="graph" class="graph-canvas"><svg class="graph-lines" viewBox="0 0 100 100" preserveAspectRatio="none"><defs><marker id="arrow-gray" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#c7d2d8"></path></marker><marker id="arrow-green" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#36a879"></path></marker><marker id="arrow-red" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#d25c5c"></path></marker></defs><path id="edge-parse-classify" d="M23 50 L28 25"></path><path id="edge-parse-priority" d="M23 50 L28 50"></path><path id="edge-parse-solution" d="M23 50 L28 82"></path><path id="edge-classify-routing" d="M47 18 L53 18"></path><path id="edge-priority-aggregate" d="M48 53 L78 53"></path><path id="edge-solution-aggregate" d="M48 82 L78 53"></path><path id="edge-routing-aggregate" d="M72 25 L78 42"></path></svg><div id="nodes"></div></div></section>
       <section class="card"><h2>事件日志</h2><div id="events" class="muted">暂无数据</div></section>
       <section class="card rag">
@@ -125,6 +154,36 @@
       renderNodes(events);
       $("events").innerHTML = events.length ? events.map((event) => `<div class="node"><span>${esc(labels[event.node] || event.node)}</span><span class="muted">${esc(event.status)} · ${esc(event.timestamp || "")}</span></div>`).join("") : "暂无数据";
     }
+    function ticketStatusLabel(status) { return status === "resolved" ? "已解决" : "未解决"; }
+    function renderTicketStats(stats = {}) {
+      $("ticketStats").innerHTML = `<span class="ticket-stat">全部 ${stats.all || 0}</span><span class="ticket-stat">未解决 ${stats.unresolved || 0}</span><span class="ticket-stat">已解决 ${stats.resolved || 0}</span>`;
+    }
+    function renderTickets(tickets = []) {
+      $("ticketList").innerHTML = tickets.length ? tickets.map((ticket) => `<article class="ticket-item">
+        <div class="ticket-main"><div><strong>${esc(ticket.ticket_id)} · ${esc(ticket.title)}</strong><div class="ticket-meta">${esc(ticket.user_id || "未知用户")} · ${esc(ticket.created_at)} · ${esc(ticket.category)} / ${esc(ticket.subcategory)} · ${esc(ticket.priority)} · ${esc(ticket.team)}</div></div><span class="ticket-status ${esc(ticket.status)}">${ticketStatusLabel(ticket.status)}</span></div>
+        <div class="ticket-description">${esc(ticket.description || "暂无描述")}</div>
+        <details><summary class="muted">查看分诊报告与处理建议</summary><div class="ticket-description">用户回复草稿：${esc(ticket.report?.user_reply_draft || "暂无")}</div><div class="ticket-description">工程师建议：${esc(ticket.report?.engineer_advice || "暂无")}</div></details>
+        <div class="ticket-meta">当前备注：${esc(ticket.resolution_note || "暂无")}${ticket.status_updated_at ? ` · 最近更新 ${esc(ticket.status_updated_at)}` : ""}</div>
+        <div class="ticket-actions"><select data-ticket-status="${esc(ticket.ticket_id)}"><option value="unresolved" ${ticket.status === "unresolved" ? "selected" : ""}>未解决</option><option value="resolved" ${ticket.status === "resolved" ? "selected" : ""}>已解决</option></select><input data-ticket-note="${esc(ticket.ticket_id)}" value="${esc(ticket.resolution_note || "")}" placeholder="填写处理备注（如：已重置密码并回访确认）"><button data-ticket-save="${esc(ticket.ticket_id)}">保存状态与备注</button></div>
+      </article>`).join("") : "暂无符合条件的工单";
+      document.querySelectorAll("[data-ticket-save]").forEach((button) => { button.onclick = () => updateTicket(button.dataset.ticketSave); });
+    }
+    async function refreshTickets() {
+      const status = $("ticketStatus").value, query = $("ticketQuery").value.trim();
+      $("ticketList").textContent = "加载中…";
+      const response = await fetch(`/api/tickets?status=${encodeURIComponent(status)}&q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      if (!response.ok) { $("ticketList").textContent = data.error || "工单加载失败"; return; }
+      renderTicketStats(data.stats); renderTickets(data.tickets);
+    }
+    async function updateTicket(ticketId) {
+      const status = document.querySelector(`[data-ticket-status="${CSS.escape(ticketId)}"]`)?.value;
+      const note = document.querySelector(`[data-ticket-note="${CSS.escape(ticketId)}"]`)?.value.trim() || "";
+      const response = await fetch("/api/tickets/update", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ticket_id:ticketId, status, resolution_note:note}) });
+      const data = await response.json();
+      if (!response.ok) { alert(data.error || "工单更新失败"); return; }
+      await refreshTickets();
+    }
     async function refreshFiles() {
       const [files, status] = await Promise.all([fetch("/api/rag/files").then((r) => r.json()), fetch("/api/rag/status").then((r) => r.json())]);
       $("ragStatus").innerHTML = `<span class="metric">索引：${status.ready ? "就绪" : "未构建"}</span><span class="metric">源文档：${status.source_documents}</span><span class="metric">已索引：${status.indexed_documents}</span>`;
@@ -171,7 +230,11 @@
       else viewDocs();
     };
     $("auditSearch").onclick = () => refreshAudit($("auditUser").value.trim());
+    $("ticketRefresh").onclick = refreshTickets;
+    $("ticketStatus").onchange = refreshTickets;
+    $("ticketQuery").onkeydown = (event) => { if (event.key === "Enter") refreshTickets(); };
     renderNodes(); renderEdges(); refreshRuns(true); refreshFiles(); refreshAudit();
+    refreshTickets();
     setInterval(() => refreshRuns(false), 5000);
   </script>
 </body>

@@ -10,6 +10,8 @@ from src.llm_client import ROOT, load_config
 
 COLLECTION = "helpdesk_solutions"
 _LOCK = threading.Lock()
+_CACHED_STORE: VectorStore | None = None
+_CACHE_LOCK = threading.Lock()
 
 def load_documents(root: Path = ROOT) -> list[dict[str, Any]]:
     documents: list[dict[str, Any]] = []
@@ -67,11 +69,18 @@ class VectorStore:
         self._client = chromadb.PersistentClient(path=str(index_dir))
         self.index_dir = index_dir
         self._embedding = LocalBGEEmbeddingFunction(settings["embedding"]["model"])
+        # Query embeddings are the dominant per-request cost.  Keep a small
+        # process-local cache for repeated questions (including UI retries),
+        # while still rebuilding/clearing it whenever the index changes.
+        self._search_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        self._search_cache_lock = threading.Lock()
         self._collection = self._client.get_or_create_collection(
             COLLECTION, embedding_function=self._embedding, metadata={"hnsw:space": "cosine"}
         )
 
     def rebuild(self, documents: list[dict[str, Any]]) -> int:
+        if not documents:
+            raise ValueError("没有可索引的文档")
         with _LOCK:
             try:
                 self._client.delete_collection(COLLECTION)
@@ -80,16 +89,28 @@ class VectorStore:
             self._collection = self._client.create_collection(
                 COLLECTION, embedding_function=self._embedding, metadata={"hnsw:space": "cosine"}
             )
+            ids = [str(item["id"]) for item in documents]
+            if len(ids) != len(set(ids)):
+                raise ValueError("索引文档 ID 必须唯一")
             self._collection.add(
-                ids=[item["id"] for item in documents],
+                ids=ids,
                 documents=[item["text"] for item in documents],
                 metadatas=[{"source": item["source"], "title": item["title"],
                             "steps_json": json.dumps(item["steps"], ensure_ascii=False)} for item in documents],
             )
+            with self._search_cache_lock:
+                self._search_cache.clear()
             (self.index_dir / ".ready").write_text(str(len(documents)), encoding="ascii")
         return len(documents)
 
     def search(self, query: str, top_k: int = 3) -> list[dict[str, Any]]:
+        query = " ".join(str(query).split())[:500]
+        top_k = max(1, min(int(top_k), 10))
+        cache_key = (query, top_k)
+        with self._search_cache_lock:
+            cached = self._search_cache.get(cache_key)
+            if cached is not None:
+                return [dict(item, steps=list(item.get("steps", []))) for item in cached]
         with _LOCK:
             result = self._collection.query(query_texts=[query], n_results=top_k,
                                             include=["metadatas", "distances"])
@@ -100,4 +121,26 @@ class VectorStore:
             relevance = "高" if distance <= 0.3 else "中" if distance <= 0.6 else "低"
             matches.append({"source": metadata["source"], "title": metadata["title"],
                             "steps": json.loads(metadata["steps_json"]), "relevance": relevance})
+        with self._search_cache_lock:
+            # Bound memory usage if a long-running server receives many unique
+            # queries.  Dict insertion order gives a simple FIFO eviction.
+            if len(self._search_cache) >= 128:
+                self._search_cache.pop(next(iter(self._search_cache)))
+            self._search_cache[cache_key] = matches
         return matches
+
+
+def get_cached_store(config: dict[str, Any] | None = None) -> VectorStore:
+    """Reuse one Chroma/BGE instance so each chat does not reload model weights."""
+    global _CACHED_STORE
+    if _CACHED_STORE is None:
+        with _CACHE_LOCK:
+            if _CACHED_STORE is None:
+                _CACHED_STORE = VectorStore(config)
+    return _CACHED_STORE
+
+
+def clear_cached_store() -> None:
+    global _CACHED_STORE
+    with _CACHE_LOCK:
+        _CACHED_STORE = None

@@ -11,7 +11,8 @@ def search_web(query: str, limit: int = 5) -> list[dict[str, str]]:
 
     Network failures intentionally return an empty list so chat remains usable offline.
     """
-    query = query.strip()
+    query = " ".join(query.split())[:500]
+    limit = max(1, min(int(limit), 10))
     if not query:
         return []
     url = f"https://api.duckduckgo.com/?q={quote(query)}&format=json&no_html=1&skip_disambig=1"

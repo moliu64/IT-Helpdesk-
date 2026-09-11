@@ -13,10 +13,14 @@ if str(ROOT) not in sys.path:
 from src.agents.classify import classify_ticket
 from src.agents.priority import assess_priority
 from src.agents.solution_retrieval import retrieve_solutions
+from src.llm_client import load_config
 from src.ticket_parser import parse_ticket
 
 
 def evaluate() -> dict:
+    # Keep CLI evaluation behavior consistent with the app: load local .env
+    # values without requiring python-dotenv.
+    load_config()
     output = ROOT / "outputs" / "eval_result.json"
     if not os.getenv("LLM_API_KEY"):
         result = {"status": "not_run", "reason": "LLM_API_KEY 未设置；未运行真实模型评测，未生成虚构指标。"}
@@ -25,6 +29,8 @@ def evaluate() -> dict:
         print(result["reason"])
         return result
     records = json.loads((ROOT / "data" / "annotated" / "helpdesk_eval.json").read_text(encoding="utf-8"))
+    if not isinstance(records, list) or not records:
+        raise SystemExit("评测集为空，至少需要一条带 gold 标注的工单")
     category_hits = priority_hits = rag_hits = 0
     details = []
     for record in records:

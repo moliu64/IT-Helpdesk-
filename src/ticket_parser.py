@@ -98,6 +98,8 @@ def parse_ticket(source: str | Path | dict[str, Any]) -> dict[str, Any]:
         else:
             raw_data = _from_text(raw)
 
+    if not isinstance(raw_data, dict):
+        raise ValueError("工单输入必须是对象或文本")
     data = dict(raw_data)
     if not data.get("ticket_id") and source_path is not None:
         data["ticket_id"] = source_path.stem

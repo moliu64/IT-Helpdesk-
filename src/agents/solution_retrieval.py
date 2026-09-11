@@ -24,18 +24,18 @@ class SolutionResult(BaseModel):
     results: list[SolutionItem] = Field(default_factory=list)
 
 def retrieve_solutions(ticket: dict[str, Any], store: Any = None, top_k: int = 3) -> dict[str, list]:
-    query = " ".join(part for part in (ticket.get("title", ""), ticket.get("description", "")) if part).strip()
+    query = " ".join(part for part in (ticket.get("title", ""), ticket.get("description", "")) if part).strip()[:500]
     if not query:
         return SolutionResult(results=[]).model_dump()
     if store is None:
-        from src.rag.vector_store import VectorStore
+        from src.rag.vector_store import get_cached_store
         try:
             from src.llm_client import ROOT, load_config
             index = Path(load_config()["rag"]["index_dir"])
             index = index if index.is_absolute() else ROOT / index
             if not (index / ".ready").is_file():
                 return SolutionResult(results=[]).model_dump()
-            store = VectorStore()
+            store = get_cached_store()
         except Exception:
             return SolutionResult(results=[]).model_dump()
     try:

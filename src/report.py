@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +66,11 @@ def build_report(ticket: dict[str, Any], classification: dict, priority: dict,
         "engineer_advice": "\n".join(engineer_points),
     }
     target = output_root or ROOT / "outputs"
-    folder = target / ticket.get("ticket_id", "UNASSIGNED")
+    raw_ticket_id = str(ticket.get("ticket_id", "UNASSIGNED"))
+    # Ticket IDs originate from user/API input. Keep report artifacts inside
+    # the configured output root even when an ID contains path separators.
+    safe_ticket_id = re.sub(r"[^A-Za-z0-9._-]+", "_", raw_ticket_id).strip("._") or "UNASSIGNED"
+    folder = target / safe_ticket_id
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     lines = [f"# Helpdesk 工单报告：{ticket.get('ticket_id', '')}", "", "## 工单基本信息", f"- 标题：{ticket.get('title', '')}", f"- 申请人：{ticket.get('requester', '')}", f"- 渠道：{ticket.get('channel', '')}", f"- 描述：{ticket.get('description', '')}", "", "## 分诊结论", f"- 分类：{cls.get('category', '待确认')} / {cls.get('subcategory', '')}（置信度 {cls.get('confidence', '')}）", f"- 优先级：{effective_priority}，SLA：{sla_hours} 小时", f"- 路由：{route.get('team', '待分派')}", "", "## 相似解决方案"]
