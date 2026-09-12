@@ -46,9 +46,9 @@ Python 3.10+ · DeepSeek OpenAI-compatible API · Pydantic · PyYAML · Chroma �
 
 | 入口 | Windows 双击 | PowerShell / Linux/macOS | 用途 |
 | --- | --- | --- | --- |
-| 一键启动全部 | `一键启动.bat` | `一键启动.ps1` / `./start.sh --open-browser` | 同时启动用户端和后台管理端 |
+| 一键部署上线 | `一键部署上线.bat` | `一键部署上线.ps1` | 启动本机源站并连接 Cloudflare Tunnel |
 | 命令行启动 | `start.bat` | `start.ps1` / `./start.sh` | 启动服务但不自动打开浏览器 |
-| 线上 Tunnel（可选） | - | `start_online.ps1` | 启动本机源站和 Cloudflare Tunnel |
+| 本地一键启动（兼容） | `一键启动.bat` | `一键启动.ps1` | 转发到一键部署上线入口 |
 
 同一服务启动后，后台也可以从 `http://127.0.0.1:8787/backend` 或 `http://127.0.0.1:8787/admin` 进入。
 
@@ -93,10 +93,10 @@ python -m src.main --input data/raw/sample_ticket.txt
 ### 4. 启动 Web UI
 
 ```powershell
-./一键启动.ps1
+./一键部署上线.ps1
 ```
 
-Windows 也可以双击 `一键启动.bat`；Linux/macOS 使用 `./start.sh --open-browser`。首次运行会自动创建 `.venv` 并安装运行依赖，并默认以 HuggingFace 离线模式启动，避免每次启动重复下载模型。浏览器打开 <http://127.0.0.1:8787> 和 <http://127.0.0.1:8787/backend>。两套页面由同一个服务提供，不需要启动第二个后台进程。可导入 PDF、DOCX、MD、TXT 后重建本地索引。导入文本按 900 字符切分，固定保留 15% 上下文重叠。UI 数据保存在本地 `ui/helpdesk.db`，上传文件位于 `data/knowledge/imports/`；二者均不会提交到仓库。后台和管理 API 由 `HELPDESK_ADMIN_USER`、`HELPDESK_ADMIN_PASSWORD` 保护；线上还应设置稳定的 `HELPDESK_SESSION_SECRET`，不要使用示例值。
+Windows 直接双击 `一键部署上线.bat` 或执行 `一键部署上线.ps1`，脚本会创建/复用 `.venv`、启动本机源站、等待 `/healthz` 成功，再连接 Cloudflare Tunnel。线上地址由 `HELPDESK_PUBLIC_URL` 决定，默认是 `https://060115.top`。首次运行会自动安装依赖，并默认以 HuggingFace 离线模式启动，避免重复下载模型。兼容入口 `一键启动.bat/.ps1` 会转发到同一部署流程。部署日志写入 `output/online-app.log`、`output/online-app.err`、`output/cloudflared.log` 和 `output/cloudflared.err`；失败时脚本会自动清理已启动的子进程。可用 `-NoBrowser` 禁止打开浏览器，`-SkipInstall` 跳过依赖安装。后台和管理 API 由 `HELPDESK_ADMIN_USER`、`HELPDESK_ADMIN_PASSWORD` 保护；线上还应设置稳定的 `HELPDESK_SESSION_SECRET`，不要使用示例值。
 
 后端页面的“工单管理”区会汇总所有用户已提交工单，并显示分类、优先级、路由和描述。运维人员可以按工单号、标题、用户或描述搜索，也可以按“未解决 / 已解决”筛选；更新状态时填写处理备注（例如复现结果、采取的措施、回访结论），系统会保存状态更新时间并同步到该工单的报告数据，便于后续统计完成量和复盘处理过程。
 
@@ -159,7 +159,7 @@ python scripts/evaluate.py
 └── requirements*.txt
 ```
 
-仓库根目录的 `start.bat`、`start.ps1`、`start.sh` 和中文“一键启动”入口都调用同一个 `scripts/start.py`。一键入口通过 `--open-browser` 自动打开用户端与后台端；后台不再有独立启动进程，避免端口和数据库状态分裂。
+仓库根目录的 `start.bat`、`start.ps1`、`start.sh` 调用同一个 `scripts/start.py`；中文“一键部署上线”入口负责源站与 Tunnel 的完整启动，“一键启动”仅作为兼容转发。后台不再有独立启动进程，避免端口和数据库状态分裂。
 
 `legacy_contract_review/` 是历史合同审查项目的只读归档，不属于当前运行链路，当前项目不会 import 它。
 
@@ -188,7 +188,8 @@ python scripts/evaluate.py
 - 修复健康检查依赖审计数据库、RAG 状态文件损坏、非法上传和内部异常错误码不准确等问题。
 - RAG 重建增加文档校验、临时 collection 和原子 ready 标记，避免异常输入破坏可用索引。
 - LLM 客户端增加超时并关闭 SDK 隐式重试；工单解析不再把长文本误判为 Windows 文件路径。
-- 统一用户端与后台端为同一个服务进程；新增“一键启动全部”入口，删除重复的独立后台和中文线上启动别名，避免端口与数据库状态分裂。
+- 统一用户端与后台端为同一个服务进程；新增“一键部署上线”入口，旧“一键启动”入口保留为兼容转发，避免端口与数据库状态分裂。
+- 修复 Windows PowerShell/cmd 中文乱码，部署脚本统一使用 UTF-8，并在服务健康检查成功后再连接 Tunnel。
 - 增加安全回归测试，当前验证结果为 `26 passed`、Ruff 通过、Python 编译检查通过。
 - 修复并验证 `https://060115.top/`、`https://060115.top/healthz`；线上后台未配置管理员凭据时默认拒绝访问。
 
