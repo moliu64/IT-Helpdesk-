@@ -29,7 +29,7 @@ curl http://127.0.0.1:8787/healthz
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入 LLM_API_KEY
+# 编辑 .env，填入 LLM_API_KEY、管理员账号/强密码和稳定的 HELPDESK_SESSION_SECRET
 docker compose -f docker-compose.yml up -d --build
 curl http://127.0.0.1:8787/healthz
 ```

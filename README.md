@@ -96,7 +96,7 @@ python -m src.main --input data/raw/sample_ticket.txt
 ./start.ps1
 ```
 
-Windows 也可以双击 `start.bat`；Linux/macOS 使用 `./start.sh`。首次运行会自动创建 `.venv` 并安装运行依赖。浏览器打开 <http://127.0.0.1:8787>。后端监视与 RAG 管理位于 <http://127.0.0.1:8787/backend>，可导入 PDF、DOCX、MD、TXT 后重建本地索引。也可以单独启动后端监视页：Windows 双击 `start_backend.bat`（或执行 `./start_backend.ps1`），Linux/macOS 执行 `./start_backend.sh`，默认访问 <http://127.0.0.1:8788/backend>。导入文本按 900 字符切分，固定保留 15% 上下文重叠。UI 数据保存在本地 `ui/helpdesk.db`，上传文件位于 `data/knowledge/imports/`；二者均不会提交到仓库。此 UI 没有生产级认证和权限控制，请勿直接暴露到公网。
+Windows 也可以双击 `start.bat`；Linux/macOS 使用 `./start.sh`。首次运行会自动创建 `.venv` 并安装运行依赖。浏览器打开 <http://127.0.0.1:8787>。后端监视与 RAG 管理位于 <http://127.0.0.1:8787/backend>，可导入 PDF、DOCX、MD、TXT 后重建本地索引。也可以单独启动后端监视页：Windows 双击 `start_backend.bat`（或执行 `./start_backend.ps1`），Linux/macOS 执行 `./start_backend.sh`，默认访问 <http://127.0.0.1:8788/backend>。导入文本按 900 字符切分，固定保留 15% 上下文重叠。UI 数据保存在本地 `ui/helpdesk.db`，上传文件位于 `data/knowledge/imports/`；二者均不会提交到仓库。后台和管理 API 由 `HELPDESK_ADMIN_USER`、`HELPDESK_ADMIN_PASSWORD` 保护；线上还应设置稳定的 `HELPDESK_SESSION_SECRET`，不要使用示例值。
 
 后端页面的“工单管理”区会汇总所有用户已提交工单，并显示分类、优先级、路由和描述。运维人员可以按工单号、标题、用户或描述搜索，也可以按“未解决 / 已解决”筛选；更新状态时填写处理备注（例如复现结果、采取的措施、回访结论），系统会保存状态更新时间并同步到该工单的报告数据，便于后续统计完成量和复盘处理过程。
 
@@ -106,7 +106,7 @@ Windows 也可以双击 `start.bat`；Linux/macOS 使用 `./start.sh`。首次�
 
 ### 6. Cloudflare 部署（060115.top）
 
-本项目是 Python 后端，Cloudflare 负责域名、HTTPS 和 Tunnel 代理，应用运行在一台可持续运行的 Windows/Linux 主机上。部署模板位于 [`deploy/060115.top/`](deploy/060115.top/)，包括 Cloudflare Tunnel、Docker Compose、systemd 和 Nginx 方案。
+本项目是 Python 后端，Cloudflare 负责域名、HTTPS 和 Tunnel 代理，应用运行在一台可持续运行的 Windows/Linux 主机上。部署模板位于 [`deploy/060115.top/`](deploy/060115.top/)，包括 Cloudflare Tunnel、Docker Compose、systemd 和 Nginx 方案。生产环境必须配置管理员账号、强密码和稳定的会话密钥；Cloudflare Tunnel 本身不替代应用层认证。
 
 线上入口：
 

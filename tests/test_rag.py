@@ -19,3 +19,16 @@ def test_retrieval_output_uses_store_matches():
 
 def test_no_query_returns_empty_results():
     assert retrieve_solutions({}, store=FakeStore()) == {"results": []}
+
+
+def test_malformed_history_record_is_skipped(tmp_path):
+    knowledge = tmp_path / "data" / "knowledge"
+    tickets = tmp_path / "data" / "tickets"
+    knowledge.mkdir(parents=True)
+    tickets.mkdir(parents=True)
+    (tickets / "historical_tickets.json").write_text(
+        '[{"ticket_id":"HIST-1","title":"ok","description":"desc","resolution":"fix"},'
+        '{"ticket_id":"HIST-2","title":"missing"}, null]', encoding="utf-8"
+    )
+    docs = load_documents(tmp_path)
+    assert [item["source"] for item in docs] == ["HIST-1"]

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import base64
+import hmac
 import json
 import os
+import secrets
 import sqlite3
 import sys
 import threading
 from datetime import datetime
+from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from uuid import uuid4
@@ -25,6 +29,10 @@ from src.rag.vector_store import get_cached_store, load_documents
 from src.ticket_parser import parse_ticket
 from src.web_search import search_web
 
+# Load the local .env before route authentication is evaluated. The loader only
+# imports environment values and never writes secrets back to the repository.
+load_config()
+
 INDEX = Path(__file__).with_name("index.html")
 BACKEND_INDEX = Path(__file__).with_name("backend.html")
 DB_PATH = Path(os.getenv("HELPDESK_DB_PATH", str(Path(__file__).with_name("helpdesk.db"))))
@@ -33,8 +41,69 @@ if not DB_PATH.is_absolute():
 SKILLS_PATH = Path(__file__).with_name("skills")
 RAG_IMPORT_PATH = ROOT / "data" / "knowledge" / "imports"
 MAX_REQUEST_BYTES = 25 * 1024 * 1024
+MAX_IMPORT_BYTES = 10 * 1024 * 1024
 BACKEND_ONLY = os.getenv("HELPDESK_UI_MODE", "").lower() == "backend"
 _DB_SCHEMA_LOCK = threading.Lock()
+_SESSION_SECRET = os.getenv("HELPDESK_SESSION_SECRET", "") or secrets.token_urlsafe(32)
+IDENTITY_COOKIE = "helpdesk_identity"
+
+ADMIN_PAGE_ROUTES = {"/backend", "/backend.html", "/admin", "/admin.html"}
+ADMIN_API_ROUTES = {
+    "/api/tickets", "/api/tickets/update", "/api/backend/runs",
+    "/api/rag/files", "/api/rag/status", "/api/rag/documents", "/api/rag/import",
+    "/api/rag/rebuild", "/api/rag/search", "/api/audit/users", "/api/audit/logs",
+}
+USER_GET_ROUTES = {"/api/history", "/api/conversation", "/api/sessions", "/api/messages", "/api/trace"}
+
+
+def _admin_credentials() -> tuple[str, str]:
+    return (os.getenv("HELPDESK_ADMIN_USER", "").strip(),
+            os.getenv("HELPDESK_ADMIN_PASSWORD", ""))
+
+
+def _is_admin_route(route: str) -> bool:
+    return route in ADMIN_PAGE_ROUTES or route in ADMIN_API_ROUTES
+
+
+def _check_basic_auth(header: str | None) -> bool:
+    username, password = _admin_credentials()
+    if not username or not password or not header or not header.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(header[6:].strip(), validate=True).decode("utf-8")
+        supplied_user, separator, supplied_password = decoded.partition(":")
+    except (ValueError, UnicodeDecodeError):
+        return False
+    return separator == ":" and hmac.compare_digest(supplied_user, username) and hmac.compare_digest(supplied_password, password)
+
+
+def _identity_token(user_id: str) -> str:
+    encoded = base64.urlsafe_b64encode(user_id.encode("utf-8")).decode("ascii").rstrip("=")
+    signature = hmac.new(_SESSION_SECRET.encode("utf-8"), encoded.encode("ascii"), "sha256").digest()
+    signed = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+    return f"{encoded}.{signed}"
+
+
+def _identity_from_token(token: str | None) -> str:
+    if not token or "." not in token:
+        return ""
+    encoded, supplied_signature = token.split(".", 1)
+    try:
+        expected = _identity_token_from_encoded(encoded).split(".", 1)[1]
+    except (UnicodeEncodeError, ValueError):
+        return ""
+    if not hmac.compare_digest(supplied_signature, expected):
+        return ""
+    try:
+        padding = "=" * (-len(encoded) % 4)
+        return base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return ""
+
+
+def _identity_token_from_encoded(encoded: str) -> str:
+    signature = hmac.new(_SESSION_SECRET.encode("utf-8"), encoded.encode("ascii"), "sha256").digest()
+    return f"{encoded}.{base64.urlsafe_b64encode(signature).decode('ascii').rstrip('=')}"
 
 
 class ChatReplyItem(BaseModel):
@@ -177,13 +246,18 @@ def save_trace(user_id: str, session_id: str, event: dict) -> None:
 
 def record_access(user_id: str, session_id: str, method: str, path: str) -> None:
     """Persist a lightweight audit record for later per-user monitoring."""
-    conn = db()
-    conn.execute(
-        "INSERT INTO access_logs(user_id,session_id,method,path,created_at) VALUES(?,?,?,?,?)",
-        (user_id, session_id, method, path, datetime.now().isoformat(timespec="seconds")),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn = db()
+        conn.execute(
+            "INSERT INTO access_logs(user_id,session_id,method,path,created_at) VALUES(?,?,?,?,?)",
+            (user_id, session_id, method, path, datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as exc:
+        # Audit logging is best effort and must not take down health checks or
+        # user-facing requests when the database is temporarily unavailable.
+        print(f"[ui] access log skipped: {exc}", file=sys.stderr)
 
 
 def compact_history(rows: list[sqlite3.Row]) -> list[dict[str, str]]:
@@ -352,24 +426,92 @@ def review_ticket(payload: dict) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, status: int, body: bytes, content_type: str) -> None:
+    def _send(self, status: int, body: bytes, content_type: str, set_cookie_user: str = "") -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store" if content_type.startswith("application/json") else "no-cache")
+        if set_cookie_user:
+            self._set_identity_cookie(set_cookie_user)
         self.end_headers()
         self.wfile.write(body)
+
+    def _cookie_user_id(self) -> str:
+        cookies = SimpleCookie()
+        try:
+            cookies.load(self.headers.get("Cookie", ""))
+        except (CookieError, ValueError):
+            return ""
+        return _identity_from_token(cookies.get(IDENTITY_COOKIE).value if cookies.get(IDENTITY_COOKIE) else None)
+
+    def _bind_request_user(self, payload: dict) -> str | None:
+        """Use a signed server identity instead of trusting user_id from URLs."""
+        current = self._cookie_user_id()
+        if current:
+            # The client value is only a legacy/display field. Always bind the
+            # operation to the signed cookie identity.
+            payload["user_id"] = current
+            return ""
+        # A browser-supplied identifier is only a display hint. The first
+        # server request receives a fresh opaque identity, preventing callers
+        # from selecting another user's database namespace.
+        user_id = uuid4().hex
+        payload["user_id"] = user_id
+        return user_id
+
+    def _user_for_query(self) -> str | None:
+        user_id = self._cookie_user_id()
+        if not user_id:
+            self._send(401, json.dumps({"error": "请先通过聊天或提交工单建立会话"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return None
+        return user_id
+
+    def _set_identity_cookie(self, user_id: str) -> None:
+        secure = "; Secure" if os.getenv("HELPDESK_COOKIE_SECURE", "0") == "1" else ""
+        self.send_header("Set-Cookie", f"{IDENTITY_COOKIE}={_identity_token(user_id)}; Path=/; HttpOnly; SameSite=Lax{secure}")
+
+    def _require_admin(self) -> bool:
+        username, password = _admin_credentials()
+        if not username or not password:
+            self._send(503, json.dumps({"error": "后台未配置管理员账号，请设置 HELPDESK_ADMIN_USER 和 HELPDESK_ADMIN_PASSWORD"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return False
+        if _check_basic_auth(self.headers.get("Authorization")):
+            return True
+        self.send_response(401)
+        # HTTP/1.x headers are latin-1 encoded by BaseHTTPRequestHandler;
+        # keep the challenge ASCII even though the UI itself is Chinese.
+        self.send_header("WWW-Authenticate", 'Basic realm="Helpdesk Admin"')
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return False
 
     def do_GET(self) -> None:
         from urllib.parse import parse_qs, urlparse
         parsed_url = urlparse(self.path)
         route = parsed_url.path
         query = parse_qs(parsed_url.query)
-        record_access(query.get("user_id", [""])[0].strip(), query.get("session_id", [""])[0].strip(), "GET", route)
         if route == "/healthz":
             self._send(200, b'{"status":"ok"}', "application/json; charset=utf-8")
             return
+        if _is_admin_route(route) and not self._require_admin():
+            return
+        if route in USER_GET_ROUTES:
+            current_user = self._cookie_user_id()
+            requested_user = query.get("user_id", [""])[0].strip()
+            if not current_user:
+                # Keep the first page load usable, while returning no data
+                # until the browser has established its signed identity.
+                if route in {"/api/history", "/api/sessions"}:
+                    self._send(200, b"[]", "application/json; charset=utf-8")
+                else:
+                    self._send(401, json.dumps({"error": "请先通过聊天或提交工单建立会话"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                return
+            if requested_user != current_user:
+                self._send(403, json.dumps({"error": "用户身份不匹配"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                return
+        audit_user = self._cookie_user_id() if route in USER_GET_ROUTES else query.get("user_id", [""])[0].strip()
+        record_access(audit_user, query.get("session_id", [""])[0].strip(), "GET", route)
         if route in ("/", "/index.html") and BACKEND_ONLY:
             self._send(200, BACKEND_INDEX.read_bytes(), "text/html; charset=utf-8")
             return
@@ -380,9 +522,11 @@ class Handler(BaseHTTPRequestHandler):
             html = html.replace('<div class="compose"><textarea', toolbar + '<div class="compose"><textarea', 1)
             html = html.replace('const $=id=>document.getElementById(id),labels={', 'const onlineSearch=document.getElementById("onlineSearch");onlineSearch?.addEventListener("change",()=>{document.getElementById("searchHint").textContent=onlineSearch.checked?"开启：将参考公开网页并标注为网络信息":"关闭：仅使用对话上下文和本地知识库"});const $=id=>document.getElementById(id),labels={web_search:"在线搜索",', 1)
             html = html.replace('session_id:sessionId,message:text})', 'session_id:sessionId,message:text,online_search:Boolean(onlineSearch?.checked)})', 1)
+            html = html.replace("if(!r.ok)throw Error(d.error||'请求失败');bubble('assistant'", "if(!r.ok)throw Error(d.error||'请求失败');userId=d.user_id||userId;localStorage.setItem('helpdesk_user',userId);bubble('assistant'", 1)
             html = html.replace('</style>', '.online-tools{max-width:720px;margin:0 auto 8px;padding:7px 10px;color:#71808a;font-size:11px;display:flex;gap:10px;align-items:center;border:1px solid #dbe3e7;border-radius:7px;background:#f7fafb}.online-tools label{color:#1268a5;font-weight:700}.online-tools input{accent-color:#1268a5}.online-tools strong{font-weight:600}\n</style>', 1)
             ticket_modal = '''<div id="ticketModal" class="ticket-modal"><div class="ticket-card"><h2>提交工单</h2><input id="ticketTitle" placeholder="标题"><input id="ticketRequester" placeholder="申请人"><textarea id="ticketDescription" placeholder="请描述现象、报错、已尝试操作和影响范围"></textarea><select id="ticketChannel"><option value="chat">聊天</option><option value="portal">门户</option><option value="email">邮件</option><option value="phone">电话</option></select><input id="ticketContact" class="ticket-contact" placeholder="联系方式（手机号 / 邮箱 / 分机号）"><div><button onclick="closeTicketModal()">取消</button><button class="ticket-primary" onclick="submitTicket()">提交</button></div><p id="ticketMessage"></p></div></div>'''
             html = html.replace('</body>', ticket_modal + '''<script>function openTicketModal(){document.getElementById("ticketModal").classList.add("open");document.getElementById("ticketRequester").value=localStorage.getItem("helpdesk_user")||""}function closeTicketModal(){document.getElementById("ticketModal").classList.remove("open")}async function submitTicket(){const title=document.getElementById("ticketTitle").value.trim(),requester=document.getElementById("ticketRequester").value.trim(),description=document.getElementById("ticketDescription").value.trim(),channel=document.getElementById("ticketChannel").value,contact=document.getElementById("ticketContact").value.trim(),msg=document.getElementById("ticketMessage");if(!title||!requester||!description){msg.textContent="请填写标题、申请人和描述";return}msg.textContent="提交中…";try{const response=await fetch("/api/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:localStorage.getItem("helpdesk_user")||requester,session_id:sessionId,ticket:{title,requester,description,channel,contact}})});const data=await response.json();if(!response.ok){msg.textContent=data.error||"提交失败";return}msg.textContent="工单已提交："+(data.ticket?.ticket_id||data.ticket_id||"已生成");setTimeout(closeTicketModal,1200)}catch(error){msg.textContent="提交失败："+error.message}}</script></body>''', 1)
+            html = html.replace('if(!response.ok){msg.textContent=data.error||"提交失败";return}msg.textContent="工单已提交', 'if(!response.ok){msg.textContent=data.error||"提交失败";return}userId=data.user_id||userId;localStorage.setItem("helpdesk_user",userId);msg.textContent="工单已提交', 1)
             # The UI is intentionally compacted into one line, so replace the
             # stable interpolation rather than the surrounding function text.
             html = html.replace(
@@ -393,7 +537,7 @@ class Handler(BaseHTTPRequestHandler):
             html = html.replace('</style>', '.ticket-action{display:block;margin-top:10px;border:0;border-radius:6px;padding:8px 12px;background:#1268a5;color:#fff;cursor:pointer}.ticket-modal{position:fixed;inset:0;background:#0e1b24aa;display:none;place-items:center;z-index:10}.ticket-modal.open{display:grid}.ticket-card{width:min(520px,92%);background:#fff;border-radius:9px;padding:20px}.ticket-card input,.ticket-card textarea,.ticket-card select{width:100%;margin:6px 0 10px;padding:10px;border:1px solid #dbe3e7;border-radius:6px;font:inherit}.ticket-card .ticket-contact{background:#f1f3f5;color:#596771;border-color:#d8dee2}.ticket-card .ticket-contact::placeholder{color:#87939b}.ticket-card textarea{min-height:130px}.ticket-card button{padding:9px 14px;border:0;border-radius:6px;margin-right:8px;cursor:pointer}.ticket-primary{background:#1268a5;color:#fff}.ticket-card p{font-size:12px;color:#71808a}\n</style>', 1)
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
-        if route in ("/backend", "/backend.html", "/admin", "/admin.html"):
+        if route in ADMIN_PAGE_ROUTES:
             self._send(200, BACKEND_INDEX.read_bytes(), "text/html; charset=utf-8")
             return
         from urllib.parse import parse_qs, urlparse
@@ -497,8 +641,15 @@ class Handler(BaseHTTPRequestHandler):
             index = Path(load_config()["rag"]["index_dir"])
             index = index if index.is_absolute() else ROOT / index
             ready = index / ".ready"
-            indexed = int(ready.read_text(encoding="ascii").strip()) if ready.exists() else 0
-            payload = {"ready": ready.exists(), "indexed_documents": indexed,
+            indexed = 0
+            ready_ok = False
+            try:
+                indexed = max(0, int(ready.read_text(encoding="ascii").strip()))
+                ready_ok = True
+            except (OSError, ValueError):
+                # A partial/corrupt marker means the index is not ready.
+                pass
+            payload = {"ready": ready_ok, "indexed_documents": indexed,
                        "source_documents": len(load_documents())}
             self._send(200, json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
             return
@@ -535,23 +686,40 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         from urllib.parse import urlparse
         route = urlparse(self.path).path
-        record_access("", "", "POST", route)
         if route not in ("/api/review", "/api/chat", "/api/rag/import", "/api/rag/rebuild", "/api/rag/search", "/api/tickets/update"):
             self._send(404, b"Not found", "text/plain; charset=utf-8")
             return
+        if _is_admin_route(route) and not self._require_admin():
+            return
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            if size > MAX_REQUEST_BYTES:
+            if size < 0 or size > MAX_REQUEST_BYTES:
                 raise ValueError(f"请求体过大，最大允许 {MAX_REQUEST_BYTES // (1024 * 1024)} MB")
             payload = json.loads(self.rfile.read(size))
+            if not isinstance(payload, dict):
+                raise ValueError("请求体必须是 JSON 对象")
+            identity_cookie = ""
+            if route in {"/api/chat", "/api/review"}:
+                identity_cookie = self._bind_request_user(payload) or ""
+                if not payload.get("user_id"):
+                    raise ValueError("用户标识不能为空")
             if route == "/api/rag/import":
                 import base64
                 name = Path(str(payload.get("name", ""))).name
                 suffix = Path(name).suffix.lower()
-                if suffix not in SUPPORTED:
+                encoded = str(payload.get("content_base64", ""))
+                if not name or suffix not in SUPPORTED:
                     raise ValueError("仅支持 PDF、DOCX、MD、TXT")
+                try:
+                    content = base64.b64decode(encoded, validate=True)
+                except (ValueError, TypeError):
+                    raise ValueError("文件内容不是有效的 Base64") from None
+                if not content:
+                    raise ValueError("上传文件不能为空")
+                if len(content) > MAX_IMPORT_BYTES:
+                    raise ValueError("单个文件最大允许 10 MB")
                 RAG_IMPORT_PATH.mkdir(parents=True, exist_ok=True)
-                (RAG_IMPORT_PATH / name).write_bytes(base64.b64decode(payload.get("content_base64", "")))
+                (RAG_IMPORT_PATH / name).write_bytes(content)
                 record_access(*request_identity(payload), "POST", route)
                 result = {"saved": True, "name": name}
             elif route == "/api/rag/rebuild":
@@ -605,16 +773,23 @@ class Handler(BaseHTTPRequestHandler):
                 ticket_payload_session = str(payload.get("session_id", "")).strip()
                 record_access(ticket_payload_user, ticket_payload_session, "POST", route)
                 result = review_ticket(payload)
-            self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
-        except Exception as exc:
+            if route in {"/api/chat", "/api/review"}:
+                result["user_id"] = payload["user_id"]
+            self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8", identity_cookie)
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
             body = json.dumps({"error": str(exc)}, ensure_ascii=False).encode()
             self._send(400, body, "application/json; charset=utf-8")
+        except Exception as exc:
+            print(f"[ui] POST {route} failed: {exc}", file=sys.stderr)
+            self._send(500, b'{"error":"server internal error"}', "application/json; charset=utf-8")
 
     def do_DELETE(self) -> None:
         from urllib.parse import parse_qs, urlparse
 
         parsed_url = urlparse(self.path)
         route = parsed_url.path
+        if route == "/api/rag/files" and not self._require_admin():
+            return
         record_access("", "", "DELETE", route)
 
         if route == "/api/rag/files":
@@ -635,6 +810,13 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(parsed_url.query)
         user_id = query.get("user_id", [""])[0].strip()
         session_id = query.get("session_id", [""])[0].strip()
+        current_user = self._cookie_user_id()
+        if not current_user:
+            self._send(401, json.dumps({"error": "请先通过聊天或提交工单建立会话"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return
+        if user_id != current_user:
+            self._send(403, json.dumps({"error": "用户身份不匹配"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return
         if not user_id or not session_id:
             self._send(400, b'{"error":"user_id and session_id are required"}', "application/json; charset=utf-8")
             return

@@ -19,3 +19,10 @@ def test_ten_sample_extraction_accuracy():
         ticket = parse_ticket(text)["ticket"]
         correct += sum((ticket["title"] == title, ticket["description"] == description, ticket["channel"] == channel))
     assert correct / 30 >= 0.8
+
+
+def test_long_text_is_not_probed_as_a_windows_path():
+    text = "问题：" + ("网络连接失败。" * 200)
+    ticket = parse_ticket(text)["ticket"]
+    assert ticket["title"].startswith("问题：")
+    assert ticket["channel"] == "portal"

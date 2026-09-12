@@ -3,6 +3,7 @@ llm:
   api_key_env: "LLM_API_KEY"
   model: "deepseek-chat"
   temperature: 0.1
+  timeout: 45
   vision_model: "DeepSeek-V4-Flash-Vision-Exp"
 embedding:
   provider: "local"                    # local | openai。默认 local：DeepSeek 无 embedding 接口，避免依赖 OpenAI key

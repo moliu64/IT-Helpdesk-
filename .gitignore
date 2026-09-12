@@ -1,6 +1,7 @@
 outputs/
 output/
 .playwright-cli/
+.jez/
 data/tickets/index/
 data/knowledge/imports/
 deploy/060115.top/cloudflared-local-config.yml

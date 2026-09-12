@@ -40,10 +40,14 @@ class LLMClient:
         self.model = os.getenv("LLM_MODEL", cfg.get("model", "deepseek-chat"))
         self.vision_model = os.getenv("LLM_VISION_MODEL", cfg.get("vision_model", "DeepSeek-V4-Flash-Vision-Exp"))
         self.temperature = float(os.getenv("LLM_TEMPERATURE", cfg.get("temperature", 0.1)))
+        self.timeout = float(os.getenv("LLM_TIMEOUT", cfg.get("timeout", 45)))
         self.api_key = os.getenv(cfg.get("api_key_env", "LLM_API_KEY"), "")
         self._client = client
         if self._client is None and OpenAI and self.api_key:
-            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+            # Retries are owned here so agent-level retry budgets remain
+            # predictable instead of being multiplied by SDK retries.
+            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url,
+                                  max_retries=0, timeout=self.timeout)
 
     def json_completion(self, messages: list[dict[str, str]], retries: int = 3) -> Any:
         retries = max(1, int(retries))
@@ -55,6 +59,7 @@ class LLMClient:
                 response = self._client.chat.completions.create(
                     model=self.model, messages=messages, temperature=self.temperature,
                     response_format={"type": "json_object"},
+                    timeout=self.timeout,
                 )
                 content = response.choices[0].message.content
                 payload = json.loads(content)

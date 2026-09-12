@@ -6,4 +6,4 @@
 
 ## Scope
 
-当前版本是本地演示项目，不提供生产级身份认证、授权、审计或网络边界保护。`ui/server.py` 默认仅监听 `127.0.0.1`，不应直接暴露到公网。
+后台管理页面和管理 API 使用 `HELPDESK_ADMIN_USER` / `HELPDESK_ADMIN_PASSWORD` 做 Basic Auth；用户会话使用 `HELPDESK_SESSION_SECRET` 签名的 HttpOnly Cookie。生产环境仍应通过 Cloudflare Access、VPN 或 HTTPS 网关进一步限制后台入口，并设置稳定的随机密钥。`ui/server.py` 默认仅监听 `127.0.0.1`，不应在未配置认证和限流时直接暴露到公网。

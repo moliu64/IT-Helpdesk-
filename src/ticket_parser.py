@@ -89,10 +89,21 @@ def parse_ticket(source: str | Path | dict[str, Any]) -> dict[str, Any]:
     if isinstance(source, dict):
         raw_data = source.get("ticket", source)
     else:
-        path = Path(source)
-        source_path = path if path.is_file() else None
-        raw = path.read_text(encoding="utf-8-sig") if path.is_file() else str(source)
-        if path.suffix.lower() == ".json" and path.is_file():
+        # User text can be arbitrarily long and may contain characters that
+        # Windows rejects as a path.  Only probe the filesystem for short,
+        # path-like values; otherwise treat the value as ticket text directly.
+        source_text = str(source)
+        path: Path | None = None
+        if isinstance(source, Path) or (len(source_text) <= 260 and "\n" not in source_text and "\r" not in source_text):
+            try:
+                candidate = Path(source)
+                if candidate.is_file():
+                    path = candidate
+            except (OSError, ValueError):
+                path = None
+        source_path = path
+        raw = path.read_text(encoding="utf-8-sig") if path is not None else source_text
+        if path is not None and path.suffix.lower() == ".json":
             loaded = json.loads(raw)
             raw_data = loaded.get("ticket", loaded)
         else:
