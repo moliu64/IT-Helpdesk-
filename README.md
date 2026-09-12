@@ -176,5 +176,30 @@ python scripts/evaluate.py
 ## 已知限制
 
 - 本地 BGE 模型首次下载和 Chroma 建库需要一定磁盘空间与时间。
-- 默认 UI 仅监听 `127.0.0.1`，不包含生产级认证、审计和多租户隔离。
+- 用户入口默认监听 `127.0.0.1`；后台和管理 API 已提供应用层认证，但线上仍建议叠加 Cloudflare Access、VPN 或 HTTPS 网关。
 - 评测指标需在配置有效的 API Key 下实际运行后再用于对外宣传。
+
+## 变更记录与维护约定
+
+### 2026-09-12：全项目 Review 与线上稳定性优化
+
+- 修复 Windows 中文启动入口乱码，以及项目路径含空格时 Cloudflare Tunnel 配置路径被截断的问题。
+- 后台页面和管理 API 增加 Basic Auth；用户历史会话改用服务端签名的 HttpOnly Cookie 隔离。
+- 修复健康检查依赖审计数据库、RAG 状态文件损坏、非法上传和内部异常错误码不准确等问题。
+- RAG 重建增加文档校验、临时 collection 和原子 ready 标记，避免异常输入破坏可用索引。
+- LLM 客户端增加超时并关闭 SDK 隐式重试；工单解析不再把长文本误判为 Windows 文件路径。
+- 增加安全回归测试，当前验证结果为 `26 passed`、Ruff 通过、Python 编译检查通过。
+- 修复并验证 `https://060115.top/`、`https://060115.top/healthz`；线上后台未配置管理员凭据时默认拒绝访问。
+
+### 后续更新规则
+
+每次修改代码、配置、启动脚本或部署文件后，必须同步更新本 README：说明变更原因、影响范围、配置要求、启动方式和验证结果。提交 GitHub 前至少执行：
+
+```bash
+python -m pytest tests -q
+python -m ruff check src scripts tests ui
+python -m compileall -q src scripts ui
+git diff --check
+```
+
+不得将 `.env`、API Key、Cloudflare 凭据、SQLite 数据库、用户上传文件和本地向量索引提交到 GitHub。
