@@ -48,6 +48,7 @@ Python 3.10+ · DeepSeek OpenAI-compatible API · Pydantic · PyYAML · Chroma �
 | --- | --- | --- | --- |
 | 一键启动入口 | `一键启动.bat` | `一键启动.ps1` / `./start.sh` | 用户对话、工单提交和智能分诊 |
 | 后台管理入口 | `后台管理入口.bat` | `后台管理入口.ps1` / `./start_backend.sh` | 工单、运行状态、RAG 知识库和访问记录 |
+| 线上启动入口 | `上线启动.bat` | `上线启动.ps1` | 启动 Python 源站和 Cloudflare Tunnel |
 
 同一服务启动后，后台也可以从 `http://127.0.0.1:8787/backend` 或 `http://127.0.0.1:8787/admin` 进入。
 
@@ -103,16 +104,16 @@ Windows 也可以双击 `start.bat`；Linux/macOS 使用 `./start.sh`。首次�
 
 构建命令使用 `python -m pip install -r requirements.txt`，启动命令使用 `python scripts/start.py`。平台通常会注入 `PORT`；应用会读取它，线上建议设置 `HELPDESK_HOST=0.0.0.0`。健康检查地址为 `/healthz`。线上必须配置 `LLM_API_KEY`，不要上传 `.env`、SQLite 数据库或本地向量索引。正式上线前请在网关增加 HTTPS、认证和请求限流。
 
-### 6. Cloudflare 部署（06015.top）
+### 6. Cloudflare 部署（060115.top）
 
-本项目是 Python 后端，Cloudflare 负责域名、HTTPS 和 Tunnel 代理，应用运行在一台可持续运行的 Windows/Linux 主机上。部署模板位于 [`deploy/06015.top/`](deploy/06015.top/)，包括 Cloudflare Tunnel、Docker Compose、systemd 和 Nginx 方案。
+本项目是 Python 后端，Cloudflare 负责域名、HTTPS 和 Tunnel 代理，应用运行在一台可持续运行的 Windows/Linux 主机上。部署模板位于 [`deploy/060115.top/`](deploy/060115.top/)，包括 Cloudflare Tunnel、Docker Compose、systemd 和 Nginx 方案。
 
 线上入口：
 
-- 用户入口：<https://06015.top/>
-- 中文后台管理入口：<https://06015.top/backend>
-- 兼容后台入口：<https://06015.top/admin>
-- 健康检查：<https://06015.top/healthz>
+- 用户入口：<https://060115.top/>
+- 中文后台管理入口：<https://060115.top/backend>
+- 兼容后台入口：<https://060115.top/admin>
+- 健康检查：<https://060115.top/healthz>
 
 后台包含工单、知识库、运行日志和访问记录，必须在 Cloudflare Access 或其他网关中增加身份认证。不要把 API Key、SQLite 数据库、用户上传文件和本地向量索引提交到 GitHub。完整步骤见 [`docs/启动与部署说明.md`](docs/启动与部署说明.md)。
 
@@ -139,7 +140,7 @@ python scripts/evaluate.py
 │   └── annotated/          # 合成评测集与 gold 标注
 ├── docs/                   # 架构文档
 │   └── 启动与部署说明.md    # 中文入口与线上部署说明
-├── deploy/06015.top/       # 06015.top Cloudflare/容器/网关模板
+├── deploy/060115.top/      # 060115.top Cloudflare/容器/网关模板
 ├── scripts/                # 建库、造数和评测脚本
 │   └── start.py             # 跨平台 Web 启动入口
 ├── src/

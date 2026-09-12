@@ -1,4 +1,4 @@
-# 06015.top 部署包
+# 060115.top 部署包
 
 本目录是 IT 运维工单智能体的线上部署模板，不包含 API Key、数据库、用户上传文件或本地向量索引。
 
@@ -11,7 +11,7 @@ git clone https://github.com/moliu64/IT-Helpdesk-.git /opt/it-helpdesk
 cd /opt/it-helpdesk
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-cp deploy/06015.top/.env.example .env
+cp deploy/060115.top/.env.example .env
 vi .env
 ```
 
@@ -36,9 +36,9 @@ curl http://127.0.0.1:8787/healthz
 
 线上入口：
 
-- 用户入口：`https://06015.top/`
-- 中文标注的后台管理入口：`https://06015.top/backend`
-- 兼容后台入口：`https://06015.top/admin`
-- 健康检查：`https://06015.top/healthz`
+- 用户入口：`https://060115.top/`
+- 中文标注的后台管理入口：`https://060115.top/backend`
+- 兼容后台入口：`https://060115.top/admin`
+- 健康检查：`https://060115.top/healthz`
 
-检查时 `06015.top` 尚未解析到可访问服务器，因此这里只提交部署模板，不能代替真实服务器发布。DNS 和服务器权限就绪后按本文件执行即可上线。
+检查时 `060115.top` 已接入 Cloudflare，但 Tunnel 仍需切换到本项目的 `8787` 源站。

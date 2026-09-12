@@ -3,7 +3,7 @@ output/
 .playwright-cli/
 data/tickets/index/
 data/knowledge/imports/
-deploy/06015.top/cloudflared-local-config.yml
+deploy/060115.top/cloudflared-local-config.yml
 __pycache__/
 *.py[cod]
 .venv/

@@ -2,7 +2,7 @@ services:
   helpdesk:
     build:
       context: ../..
-      dockerfile: deploy/06015.top/Dockerfile
+      dockerfile: deploy/060115.top/Dockerfile
     env_file:
       - .env
     environment:

@@ -1,6 +1,6 @@
 server {
     listen 80;
-    server_name 06015.top www.06015.top;
+    server_name 060115.top www.060115.top;
     client_max_body_size 25m;
 
     location / {
