@@ -27,7 +27,9 @@ from src.web_search import search_web
 
 INDEX = Path(__file__).with_name("index.html")
 BACKEND_INDEX = Path(__file__).with_name("backend.html")
-DB_PATH = Path(__file__).with_name("helpdesk.db")
+DB_PATH = Path(os.getenv("HELPDESK_DB_PATH", str(Path(__file__).with_name("helpdesk.db"))))
+if not DB_PATH.is_absolute():
+    DB_PATH = ROOT / DB_PATH
 SKILLS_PATH = Path(__file__).with_name("skills")
 RAG_IMPORT_PATH = ROOT / "data" / "knowledge" / "imports"
 MAX_REQUEST_BYTES = 25 * 1024 * 1024
@@ -64,6 +66,7 @@ def load_skills() -> list[dict]:
 
 
 def db() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=10000")

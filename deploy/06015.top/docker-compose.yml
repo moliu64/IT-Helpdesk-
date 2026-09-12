@@ -9,17 +9,18 @@ services:
       HELPDESK_HOST: 0.0.0.0
       HELPDESK_PORT: 8787
       PORT: 8787
+      HELPDESK_DB_PATH: /app/runtime/helpdesk.db
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
       - helpdesk-index:/app/data/tickets/index
       - helpdesk-imports:/app/data/knowledge/imports
-      - helpdesk-ui:/app/ui/data
+      - helpdesk-runtime:/app/runtime
       - helpdesk-output:/app/outputs
     restart: unless-stopped
 
 volumes:
   helpdesk-index:
   helpdesk-imports:
-  helpdesk-ui:
+  helpdesk-runtime:
   helpdesk-output:

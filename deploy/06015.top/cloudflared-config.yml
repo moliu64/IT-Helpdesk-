@@ -1,0 +1,11 @@
+# Cloudflare Tunnel 配置模板。
+# DNS 路由：cloudflared tunnel route dns <TUNNEL_UUID> 06015.top
+tunnel: YOUR_TUNNEL_UUID
+credentials-file: /etc/cloudflared/YOUR_TUNNEL_UUID.json
+
+ingress:
+  - hostname: 06015.top
+    service: http://127.0.0.1:8787
+    originRequest:
+      connectTimeout: 30s
+  - service: http_status:404
