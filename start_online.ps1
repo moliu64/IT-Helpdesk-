@@ -72,7 +72,9 @@ $env:HF_HUB_OFFLINE = "1"
 $env:TRANSFORMERS_OFFLINE = "1"
 
 try {
-    $app = Start-Process -FilePath $python -ArgumentList @("scripts/start.py", "--host", $hostName, "--port", $port) -WorkingDirectory $PSScriptRoot -RedirectStandardOutput (Join-Path $logDir "online-app.log") -RedirectStandardError (Join-Path $logDir "online-app.err") -PassThru
+    # Run both long-lived processes in hidden independent windows. Closing the
+    # launcher/CMD window must not send a console-close event to the service.
+    $app = Start-Process -FilePath $python -ArgumentList @("scripts/start.py", "--host", $hostName, "--port", $port) -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDir "online-app.log") -RedirectStandardError (Join-Path $logDir "online-app.err") -PassThru
     $app.Id | Set-Content -Path $appPidFile -Encoding ascii
     $healthUrl = "http://127.0.0.1:$port/healthz"
     $healthy = $false
@@ -82,8 +84,20 @@ try {
         try { $response = Invoke-WebRequest -UseBasicParsing -Uri $healthUrl -TimeoutSec 2; if ($response.StatusCode -eq 200) { $healthy = $true; break } } catch { }
     }
     if (-not $healthy) { throw "应用健康检查失败，请查看 $logDir\online-app.err。" }
+    # On Windows, the venv python launcher can leave the actual interpreter
+    # with a different PID. Record the process that really owns the port so
+    # stop.ps1 and the control panel can always stop the complete service.
+    $listener = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $listener) { throw "应用已返回健康检查，但未找到端口 $port 的监听进程。" }
+    $listenerProcess = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
+    if (-not $listenerProcess) { throw "无法识别端口 $port 的监听进程。" }
+    $listenerCommandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue).CommandLine
+    if ($listenerCommandLine -and ($listenerCommandLine -notlike "*start.py*" -or $listenerCommandLine -notlike "*$PSScriptRoot*")) {
+        throw "健康检查命中了非本项目进程，请先检查端口 $port。"
+    }
+    $listener.OwningProcess | Set-Content -Path $appPidFile -Encoding ascii
     $quotedTunnelConfig = '"' + $tunnelConfig + '"'
-    $tunnel = Start-Process -FilePath $cloudflared -ArgumentList @("--config", $quotedTunnelConfig, "tunnel", "run") -WorkingDirectory $PSScriptRoot -RedirectStandardOutput (Join-Path $logDir "cloudflared.log") -RedirectStandardError (Join-Path $logDir "cloudflared.err") -PassThru
+    $tunnel = Start-Process -FilePath $cloudflared -ArgumentList @("--config", $quotedTunnelConfig, "tunnel", "run") -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDir "cloudflared.log") -RedirectStandardError (Join-Path $logDir "cloudflared.err") -PassThru
     $tunnel.Id | Set-Content -Path $tunnelPidFile -Encoding ascii
     Start-Sleep -Milliseconds 800
     if ($tunnel.HasExited) { throw "Cloudflare Tunnel 启动失败，请查看 $logDir\cloudflared.err。" }

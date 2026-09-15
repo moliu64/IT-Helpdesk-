@@ -46,7 +46,8 @@ Python 3.10+ · DeepSeek OpenAI-compatible API · Pydantic · PyYAML · Chroma �
 
 | 入口 | Windows 双击 | PowerShell / Linux/macOS | 用途 |
 | --- | --- | --- | --- |
-| 一键部署上线 | `一键部署上线.bat` | `一键部署上线.ps1` | 启动本机源站并连接 Cloudflare Tunnel |
+| 项目控制面板 | `项目控制面板.bat` | `项目控制面板.ps1` | 中文图形面板：一键启动、停止项目、打开网站 |
+| 一键部署上线 | `一键部署上线.bat` | `一键部署上线.ps1` | 打开控制面板并启动本机源站与 Cloudflare Tunnel |
 | 命令行启动 | `start.bat` | `start.ps1` / `./start.sh` | 启动服务但不自动打开浏览器 |
 | 本地一键启动（兼容） | `一键启动.bat` | `一键启动.ps1` | 转发到一键部署上线入口 |
 
@@ -96,7 +97,9 @@ python -m src.main --input data/raw/sample_ticket.txt
 ./一键部署上线.ps1
 ```
 
-Windows 直接双击 `一键部署上线.bat` 或执行 `一键部署上线.ps1`，脚本会创建/复用 `.venv`、启动本机源站、等待 `/healthz` 成功，再连接 Cloudflare Tunnel。线上地址由 `HELPDESK_PUBLIC_URL` 决定，默认是 `https://060115.top`。首次运行会自动安装依赖，并默认以 HuggingFace 离线模式启动，避免重复下载模型。兼容入口 `一键启动.bat/.ps1` 会转发到同一部署流程。部署日志写入 `output/online-app.log`、`output/online-app.err`、`output/cloudflared.log` 和 `output/cloudflared.err`；失败时脚本会自动清理已启动的子进程。可用 `-NoBrowser` 禁止打开浏览器，`-SkipInstall` 跳过依赖安装。后台和管理 API 由 `HELPDESK_ADMIN_USER`、`HELPDESK_ADMIN_PASSWORD` 保护；线上还应设置稳定的 `HELPDESK_SESSION_SECRET`，不要使用示例值。
+Windows 直接双击 `一键部署上线.bat`，或执行 `一键部署上线.ps1`，会打开中文“项目控制面板”。面板启动后，Python 源站和 Cloudflare Tunnel 会作为独立隐藏进程在后台常驻；关闭 CMD 窗口或控制面板窗口都不会停止项目。只有点击面板的“停止项目”按钮，或执行 `stop.bat` / `stop.ps1`，才会关停源站和 Tunnel。也可以直接双击 `项目控制面板.bat` 打开面板。
+
+脚本会创建/复用 `.venv`、启动本机源站、等待 `/healthz` 成功，再连接 Cloudflare Tunnel。线上地址由 `HELPDESK_PUBLIC_URL` 决定，默认是 `https://060115.top`。首次运行会自动安装依赖，并默认以 HuggingFace 离线模式启动，避免重复下载模型。兼容入口 `一键启动.bat/.ps1` 会转发到同一部署流程。部署日志写入 `output/online-app.log`、`output/online-app.err`、`output/cloudflared.log`、`output/cloudflared.err`、`output/control-panel.log` 和 `output/control-panel.err`；失败时脚本会自动清理已启动的子进程。可用 `-NoBrowser` 禁止打开浏览器，`-SkipInstall` 跳过依赖安装。后台和管理 API 由 `HELPDESK_ADMIN_USER`、`HELPDESK_ADMIN_PASSWORD` 保护；线上还应设置稳定的 `HELPDESK_SESSION_SECRET`，不要使用示例值。
 
 后端页面的“工单管理”区会汇总所有用户已提交工单，并显示分类、优先级、路由和描述。运维人员可以按工单号、标题、用户或描述搜索，也可以按“未解决 / 已解决”筛选；更新状态时填写处理备注（例如复现结果、采取的措施、回访结论），系统会保存状态更新时间并同步到该工单的报告数据，便于后续统计完成量和复盘处理过程。
 
@@ -141,6 +144,8 @@ python scripts/evaluate.py
 ├── docs/                   # 架构文档
 │   └── 启动与部署说明.md    # 中文入口与线上部署说明
 ├── deploy/060115.top/      # 060115.top Cloudflare/容器/网关模板
+├── 项目控制面板.bat/.ps1   # 中文图形控制面板：启动、停止和打开网站
+├── 一键部署上线.bat/.ps1   # 中文部署入口，打开控制面板
 ├── scripts/                # 建库、造数和评测脚本
 │   └── start.py             # 跨平台 Web 启动入口
 ├── src/
@@ -159,7 +164,7 @@ python scripts/evaluate.py
 └── requirements*.txt
 ```
 
-仓库根目录的 `start.bat`、`start.ps1`、`start.sh` 调用同一个 `scripts/start.py`；中文“一键部署上线”入口负责源站与 Tunnel 的完整启动，“一键启动”仅作为兼容转发。后台不再有独立启动进程，避免端口和数据库状态分裂。
+仓库根目录的 `start.bat`、`start.ps1`、`start.sh` 调用同一个 `scripts/start.py`；中文“一键部署上线”入口打开“项目控制面板”，由面板调用后台启动脚本负责源站与 Tunnel 的完整启动。服务 PID 写入 `output/*.pid`，停止按钮和 `stop.ps1` 按登记的 PID 安全关停；“一键启动”仅作为兼容转发。后台不再有独立启动进程，避免端口和数据库状态分裂。
 
 `legacy_contract_review/` 是历史合同审查项目的只读归档，不属于当前运行链路，当前项目不会 import 它。
 
@@ -192,6 +197,14 @@ python scripts/evaluate.py
 - 修复 Windows PowerShell/cmd 中文乱码，部署脚本统一使用 UTF-8，并在服务健康检查成功后再连接 Tunnel。
 - 增加安全回归测试，当前验证结果为 `26 passed`、Ruff 通过、Python 编译检查通过。
 - 修复并验证 `https://060115.top/`、`https://060115.top/healthz`；线上后台未配置管理员凭据时默认拒绝访问。
+
+### 2026-09-15：后台常驻启动与中文控制面板
+
+- 新增 `项目控制面板.bat/.ps1`，提供“一键启动项目”“停止项目”“打开网站”三个中文标注入口。
+- 源站与 Cloudflare Tunnel 改为独立隐藏进程并记录实际服务 PID；兼容 Windows 虚拟环境 Python 启动器与实际监听进程 PID 不一致的情况。关闭 CMD 或控制面板不会停止服务，必须手动点击“停止项目”或执行 `stop.ps1`。
+- 修复控制面板 PowerShell 中文引号语法问题，并将控制面板标准输出与错误输出拆分到不同日志文件。
+- 兼容 Windows PowerShell 5 的 Windows Forms 构造方式，避免控制面板在系统 PowerShell 中启动失败。
+- `stop.ps1` 支持从 `.env` 读取自定义端口；本次验证包含 PowerShell 语法检查、测试、Ruff、compileall 和 `git diff --check`。
 
 ### 后续更新规则
 
