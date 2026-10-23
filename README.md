@@ -134,18 +134,10 @@ flowchart LR
 
 ### 环境要求
 
-<<<<<<< Updated upstream
-| 入口 | Windows 双击 | PowerShell / Linux/macOS | 用途 |
-| --- | --- | --- | --- |
-| 一键部署上线 | `一键部署上线.bat` | `一键部署上线.ps1` | 启动本机源站并连接 Cloudflare Tunnel |
-| 命令行启动 | `start.bat` | `start.ps1` / `./start.sh` | 启动服务但不自动打开浏览器 |
-| 本地一键启动（兼容） | `一键启动.bat` | `一键启动.ps1` | 转发到一键部署上线入口 |
-=======
 - Python 3.10–3.13（`pyproject.toml` 约束 `<3.14`）
 - Windows 10/11（使用一键控制面板时；Linux/macOS 可用手动方式）
 - 首次运行需联网下载 BGE 模型；之后可完全离线
 - 部署完整 RAG 演示数据约需 1–2 GB 磁盘空间
->>>>>>> Stashed changes
 
 ### 方式一：Windows 一键启动（推荐）
 
@@ -199,38 +191,7 @@ python -m src.main --input data/raw/sample_ticket.txt
 
 报告写入 `outputs/<ticket_id>/report.md` 与 `outputs/<ticket_id>/report.json`。也可传入 JSON 工单文件或包含 `工单号/标题/描述/渠道` 等字段的文本。
 
-<<<<<<< Updated upstream
-### 4. 启动 Web UI
-
-```powershell
-./一键部署上线.ps1
-```
-
-Windows 直接双击 `一键部署上线.bat` 或执行 `一键部署上线.ps1`，脚本会创建/复用 `.venv`、启动本机源站、等待 `/healthz` 成功，再连接 Cloudflare Tunnel。线上地址由 `HELPDESK_PUBLIC_URL` 决定，默认是 `https://060115.top`。首次运行会自动安装依赖，并默认以 HuggingFace 离线模式启动，避免重复下载模型。兼容入口 `一键启动.bat/.ps1` 会转发到同一部署流程。部署日志写入 `output/online-app.log`、`output/online-app.err`、`output/cloudflared.log` 和 `output/cloudflared.err`；失败时脚本会自动清理已启动的子进程。可用 `-NoBrowser` 禁止打开浏览器，`-SkipInstall` 跳过依赖安装。后台和管理 API 由 `HELPDESK_ADMIN_USER`、`HELPDESK_ADMIN_PASSWORD` 保护；线上还应设置稳定的 `HELPDESK_SESSION_SECRET`，不要使用示例值。
-
-后端页面的“工单管理”区会汇总所有用户已提交工单，并显示分类、优先级、路由和描述。运维人员可以按工单号、标题、用户或描述搜索，也可以按“未解决 / 已解决”筛选；更新状态时填写处理备注（例如复现结果、采取的措施、回访结论），系统会保存状态更新时间并同步到该工单的报告数据，便于后续统计完成量和复盘处理过程。
-
-### 5. 在线部署
-
-构建命令使用 `python -m pip install -r requirements.txt`，启动命令使用 `python scripts/start.py`。平台通常会注入 `PORT`；应用会读取它，线上建议设置 `HELPDESK_HOST=0.0.0.0`。健康检查地址为 `/healthz`。线上必须配置 `LLM_API_KEY`，不要上传 `.env`、SQLite 数据库或本地向量索引。正式上线前请在网关增加 HTTPS、认证和请求限流。
-
-### 6. Cloudflare 部署（060115.top）
-
-本项目是 Python 后端，Cloudflare 负责域名、HTTPS 和 Tunnel 代理，应用运行在一台可持续运行的 Windows/Linux 主机上。部署模板位于 [`deploy/060115.top/`](deploy/060115.top/)，包括 Cloudflare Tunnel、Docker Compose、systemd 和 Nginx 方案。生产环境必须配置管理员账号、强密码和稳定的会话密钥；Cloudflare Tunnel 本身不替代应用层认证。
-
-线上入口：
-
-- 用户入口：<https://060115.top/>
-- 中文后台管理入口：<https://060115.top/backend>
-- 兼容后台入口：<https://060115.top/admin>
-- 健康检查：<https://060115.top/healthz>
-
-后台包含工单、知识库、运行日志和访问记录，必须在 Cloudflare Access 或其他网关中增加身份认证。不要把 API Key、SQLite 数据库、用户上传文件和本地向量索引提交到 GitHub。完整步骤见 [`docs/启动与部署说明.md`](docs/启动与部署说明.md)。
-
-## 评测与测试
-=======
 ### 测试与代码检查
->>>>>>> Stashed changes
 
 ```bash
 python -m pytest tests -q        # 65 passed
@@ -388,17 +349,6 @@ Agent 的类别、团队、SLA 全部从配置读取，无硬编码。
 ├── .github/                     # GitHub Actions、Issue/PR 模板
 ├── config/config.yaml           # 模型、Embedding、RAG、分类/团队/SLA 配置
 ├── data/
-<<<<<<< Updated upstream
-│   ├── raw/                # 输入样例
-│   ├── knowledge/          # 合成 KB 文章
-│   ├── tickets/            # 合成历史工单；index/ 为生成目录
-│   └── annotated/          # 合成评测集与 gold 标注
-├── docs/                   # 架构文档
-│   └── 启动与部署说明.md    # 中文入口与线上部署说明
-├── deploy/060115.top/      # 060115.top Cloudflare/容器/网关模板
-├── scripts/                # 建库、造数和评测脚本
-│   └── start.py             # 跨平台 Web 启动入口
-=======
 │   ├── knowledge/               # 24 篇合成 KB；imports/ 为运行时上传目录
 │   ├── tickets/                 # 64 条合成历史工单；index/ 为生成的 Chroma 索引
 │   ├── annotated/               # 32 条评测集与 gold 标注
@@ -410,7 +360,6 @@ Agent 的类别、团队、SLA 全部从配置读取，无硬编码。
 │   ├── 启动与部署说明.md         # 中文启动、面板与线上部署说明
 │   └── images/                  # README 截图
 ├── scripts/                     # build_index / evaluate / start / 造数脚本
->>>>>>> Stashed changes
 ├── src/
 │   ├── agents/                  # 分类、优先级、方案检索、路由与 prompts
 │   ├── rag/                     # vector_store、managed_store、ingest
@@ -435,11 +384,6 @@ Agent 的类别、团队、SLA 全部从配置读取，无硬编码。
 ├── CONTRIBUTING.md · SECURITY.md · LICENSE
 ```
 
-<<<<<<< Updated upstream
-仓库根目录的 `start.bat`、`start.ps1`、`start.sh` 调用同一个 `scripts/start.py`；中文“一键部署上线”入口负责源站与 Tunnel 的完整启动，“一键启动”仅作为兼容转发。后台不再有独立启动进程，避免端口和数据库状态分裂。
-
-=======
->>>>>>> Stashed changes
 `legacy_contract_review/` 是历史合同审查项目的只读归档，不属于当前运行链路，当前项目不会 import 它。
 
 ## 部署
@@ -491,25 +435,7 @@ Agent 的类别、团队、SLA 全部从配置读取，无硬编码。
 
 ## 贡献
 
-<<<<<<< Updated upstream
-### 2026-09-12：全项目 Review 与线上稳定性优化
-
-- 修复 Windows 中文启动入口乱码，以及项目路径含空格时 Cloudflare Tunnel 配置路径被截断的问题。
-- 后台页面和管理 API 增加 Basic Auth；用户历史会话改用服务端签名的 HttpOnly Cookie 隔离。
-- 修复健康检查依赖审计数据库、RAG 状态文件损坏、非法上传和内部异常错误码不准确等问题。
-- RAG 重建增加文档校验、临时 collection 和原子 ready 标记，避免异常输入破坏可用索引。
-- LLM 客户端增加超时并关闭 SDK 隐式重试；工单解析不再把长文本误判为 Windows 文件路径。
-- 统一用户端与后台端为同一个服务进程；新增“一键部署上线”入口，旧“一键启动”入口保留为兼容转发，避免端口与数据库状态分裂。
-- 修复 Windows PowerShell/cmd 中文乱码，部署脚本统一使用 UTF-8，并在服务健康检查成功后再连接 Tunnel。
-- 增加安全回归测试，当前验证结果为 `26 passed`、Ruff 通过、Python 编译检查通过。
-- 修复并验证 `https://060115.top/`、`https://060115.top/healthz`；线上后台未配置管理员凭据时默认拒绝访问。
-
-### 后续更新规则
-
-每次修改代码、配置、启动脚本或部署文件后，必须同步更新本 README：说明变更原因、影响范围、配置要求、启动方式和验证结果。提交 GitHub 前至少执行：
-=======
 欢迎 Issue 和 Pull Request。提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，并确保以下命令通过：
->>>>>>> Stashed changes
 
 ```bash
 python -m pytest tests -q

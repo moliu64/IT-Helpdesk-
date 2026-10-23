@@ -1,7 +1,5 @@
 ﻿$ErrorActionPreference = "SilentlyContinue"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-<<<<<<< Updated upstream
-=======
 
 function Import-DeploymentEnv {
     $envFile = Join-Path $root ".env"
@@ -16,7 +14,6 @@ function Import-DeploymentEnv {
 }
 
 Import-DeploymentEnv
->>>>>>> Stashed changes
 $logDir = Join-Path $root "output"
 $port = if ($env:HELPDESK_ONLINE_PORT) { [int]$env:HELPDESK_ONLINE_PORT } elseif ($env:HELPDESK_PORT) { [int]$env:HELPDESK_PORT } else { 8787 }
 
@@ -31,16 +28,6 @@ function Stop-ProjectProcess([int]$processId, [string]$reason) {
 # 1) 优先按 pid 文件精确停止（最快、最安全）。
 $pidFiles = @((Join-Path $logDir "online-app.pid"), (Join-Path $logDir "cloudflared.pid"))
 foreach ($pidFile in $pidFiles) {
-<<<<<<< Updated upstream
-    if (Test-Path $pidFile) {
-        $processId = [int](Get-Content -Raw $pidFile)
-        Stop-Process -Id $processId -Force
-        Remove-Item -LiteralPath $pidFile -Force
-    }
-}
-$port = if ($env:HELPDESK_PORT) { [int]$env:HELPDESK_PORT } else { 8787 }
-$connections = Get-NetTCPConnection -LocalPort $port -State Listen
-=======
     if (-not (Test-Path -LiteralPath $pidFile)) { continue }
     $processId = 0
     $rawPid = Get-Content -Raw -LiteralPath $pidFile -ErrorAction SilentlyContinue
@@ -78,7 +65,6 @@ $connections = @()
 try {
     $connections = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
 } catch { }
->>>>>>> Stashed changes
 foreach ($connection in $connections) {
     $ownerPid = [int]$connection.OwningProcess
     if ($ownerPid -eq $PID) { continue }

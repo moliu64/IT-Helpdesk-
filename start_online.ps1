@@ -164,9 +164,6 @@ try {
         if ($app.HasExited) { break }
         try { $response = Invoke-WebRequest -UseBasicParsing -Uri $healthUrl -TimeoutSec 2; if ($response.StatusCode -eq 200) { $healthy = $true; break } } catch { }
     }
-<<<<<<< Updated upstream
-    if (-not $healthy) { throw "应用健康检查失败，请查看 $logDir\online-app.err。" }
-=======
     if (-not $healthy) {
         $appErrorLog = Join-Path $logDir "online-app.err"
         $appErrorTail = ""
@@ -188,7 +185,6 @@ try {
         throw "健康检查命中了非本项目进程，请先检查端口 $port。"
     }
     $listener.OwningProcess | Set-Content -Path $appPidFile -Encoding ascii
->>>>>>> Stashed changes
     $quotedTunnelConfig = '"' + $tunnelConfig + '"'
     $tunnel = Start-Process -FilePath $cloudflared -ArgumentList @("--config", $quotedTunnelConfig, "tunnel", "run") -WorkingDirectory $PSScriptRoot -RedirectStandardOutput (Join-Path $logDir "cloudflared.log") -RedirectStandardError (Join-Path $logDir "cloudflared.err") -PassThru
     $tunnel.Id | Set-Content -Path $tunnelPidFile -Encoding ascii
