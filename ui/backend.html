@@ -186,9 +186,123 @@
       .gn-dot { width:6px; height:6px; }
       .event-node { min-width:68px; }
     }
+  
+    /* ================= frosted-glass theme + micro-interactions ================= */
+    body {
+      background-color:#eef4f8;
+      background-image:
+        radial-gradient(115% 85% at 4% -4%, #e2eefa 0%, rgba(226,238,250,0) 60%),
+        radial-gradient(90% 70% at 96% 0%, #e2f5ec 0%, rgba(226,245,236,0) 56%),
+        linear-gradient(160deg, #e3eff9 0%, #d6e3ef 46%, #dcefe7 100%);
+      background-attachment:fixed;
+    }
+    .ambient { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+    .ambient-blob { position:absolute; border-radius:50%; filter:blur(58px); opacity:1; }
+    .ambient-blob-a {
+      width:52vw; height:52vw; min-width:380px; min-height:380px; left:-14vw; top:-20vh;
+      background:radial-gradient(circle at 35% 35%, rgba(44,120,190,.68), rgba(56,132,198,0) 68%);
+    }
+    .ambient-blob-b {
+      width:50vw; height:50vw; min-width:360px; min-height:360px; right:-18vw; top:4vh;
+      background:radial-gradient(circle at 60% 40%, rgba(22,158,112,.54), rgba(38,170,126,0) 70%);
+    }
+    .ambient-blob-c {
+      width:44vw; height:44vw; min-width:320px; min-height:320px; left:24vw; bottom:-22vh;
+      background:radial-gradient(circle at 50% 50%, rgba(102,114,202,.46), rgba(112,126,210,0) 72%);
+    }
+
+    /* ---------- admin backend: dark glass top bar + frosted cards ---------- */
+    .top {
+      position:relative; z-index:2;
+      background:linear-gradient(180deg, rgba(22,41,55,.72), rgba(15,28,39,.84));
+      -webkit-backdrop-filter:blur(18px) saturate(140%);
+      backdrop-filter:blur(18px) saturate(140%);
+      border-bottom:1px solid rgba(255,255,255,.12);
+      box-shadow:0 14px 34px -26px rgba(6,16,24,.65), inset 0 -1px 0 rgba(255,255,255,.05);
+    }
+    .wrap { position:relative; z-index:1; }
+    .card {
+      background:rgba(255,255,255,.58);
+      border-color:rgba(255,255,255,.85);
+      -webkit-backdrop-filter:blur(18px) saturate(160%);
+      backdrop-filter:blur(18px) saturate(160%);
+      box-shadow:0 20px 48px -26px rgba(19,45,62,.4), 0 0 0 1px rgba(120,146,162,.07), inset 0 1px 0 rgba(255,255,255,.9);
+    }
+    .graph-canvas {
+      background-color:rgba(255,255,255,.46);
+      -webkit-backdrop-filter:blur(14px) saturate(150%);
+      backdrop-filter:blur(14px) saturate(150%);
+      border-color:rgba(255,255,255,.72);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.8), 0 14px 30px -28px rgba(19,45,62,.35);
+    }
+    .graph-node {
+      background:rgba(255,255,255,.88);
+      -webkit-backdrop-filter:blur(10px) saturate(150%);
+      backdrop-filter:blur(10px) saturate(150%);
+      border-color:rgba(214,226,233,.9);
+    }
+    .graph-node.pending { background:linear-gradient(180deg, rgba(255,255,255,.9), rgba(247,250,252,.82)); }
+    .graph-node.completed { background:linear-gradient(180deg, rgba(255,255,255,.9), rgba(235,249,242,.86)); border-color:rgba(191,228,211,.95); }
+    .graph-node.running { background:linear-gradient(180deg, rgba(255,254,250,.92), rgba(253,243,228,.88)); }
+    .graph-node.error { background:linear-gradient(180deg, rgba(255,253,253,.92), rgba(253,239,239,.88)); }
+    .metric { background:rgba(255,255,255,.55); border-color:rgba(255,255,255,.7); }
+    input, select { background:rgba(255,255,255,.84); border-color:rgba(214,226,233,.9); }
+    .rag-manage { background:rgba(255,255,255,.64); border-color:rgba(255,255,255,.78); }
+    .toast {
+      background:rgba(24,42,55,.85);
+      -webkit-backdrop-filter:blur(16px) saturate(150%);
+      backdrop-filter:blur(16px) saturate(150%);
+      border:1px solid rgba(255,255,255,.14);
+    }
+    .doc-item { background:rgba(255,255,255,.4); border-color:rgba(255,255,255,.6); }
+
+    /* ---------- admin backend: button micro-interactions ---------- */
+    button, .rag-manage, .delete-file, .retry, .switch-track, .graph-node {
+      transition:transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .24s ease,
+                 background .2s ease, border-color .2s ease, color .2s ease;
+    }
+    button:hover:not(:disabled) { transform:translateY(-1px); }
+    button:active:not(:disabled) { transform:translateY(0) scale(.986); }
+    .toolbar button, .ticket-actions button, #ragSearch, #auditSearch, .rag-manage,
+    #upload, #rebuild { position:relative; overflow:hidden; }
+    .toolbar button::before, .ticket-actions button::before, #ragSearch::before, #auditSearch::before,
+    .rag-manage::before, #upload::before, #rebuild::before {
+      content:""; position:absolute; inset:0; border-radius:inherit;
+      background:linear-gradient(115deg, transparent 32%, rgba(255,255,255,.24) 50%, transparent 68%);
+      transform:translateX(-130%); transition:transform .6s cubic-bezier(.2,.7,.2,1); pointer-events:none;
+    }
+    .toolbar button:hover::before, .ticket-actions button:hover::before, #ragSearch:hover::before,
+    #auditSearch:hover::before, .rag-manage:hover::before, #upload:hover::before, #rebuild:hover::before {
+      transform:translateX(130%);
+    }
+    .rag-manage:hover, .toolbar button:hover:not(:disabled) { box-shadow:0 10px 22px -14px rgba(19,45,62,.45); }
+    .graph-node:hover { box-shadow:0 2px 4px rgba(16,42,58,.08), 0 20px 34px -18px rgba(16,42,58,.45); }
+    .switch:hover .switch-track { box-shadow:0 0 0 3px rgba(18,104,165,.12); }
+    .delete-file:hover, .retry:hover { transform:translateY(-1px); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration:.001ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.001ms !important;
+        scroll-behavior:auto !important;
+      }
+      .btn:hover, button:hover:not(:disabled), .icon-btn:hover, .send:hover:not(:disabled),
+      .suggestion:hover, .new-chat:hover, .doc-item:hover, .session-item:hover,
+      .rag-manage:hover, .graph-node:hover, .admin-link:hover, .top-nav a:hover {
+        transform:none !important;
+      }
+      .btn::before, .btn-dark::before, .send::before, #submitBtn::before { display:none !important; }
+    }
+
   </style>
 </head>
 <body>
+  <div class="ambient" aria-hidden="true">
+    <span class="ambient-blob ambient-blob-a"></span>
+    <span class="ambient-blob ambient-blob-b"></span>
+    <span class="ambient-blob ambient-blob-c"></span>
+  </div>
   <header class="top">
     <div class="brand"><span class="brand-mark">HD</span><b>HELPDESK</b><span class="brand-sub">/ 后端监视</span></div>
     <nav class="top-nav">

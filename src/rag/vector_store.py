@@ -100,7 +100,11 @@ class VectorStore:
             try:
                 staged.add(
                     ids=ids,
-                    documents=[item["text"] for item in documents],
+                    # Index the title together with the body: a knowledge entry
+                    # is retrieved by its topic name ("Too many open files",
+                    # "crontab 磁盘爆满") far more reliably this way.  The stored
+                    # metadata/UI text stays unchanged.
+                    documents=[f"{item['title']}\n{item['text']}" for item in documents],
                     metadatas=[{"source": item["source"], "title": item["title"],
                                 "steps_json": json.dumps(item["steps"], ensure_ascii=False)} for item in documents],
                 )

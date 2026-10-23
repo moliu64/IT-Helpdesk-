@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>管理后台登录 · Helpdesk</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%23142431'/%3E%3Cpath%20d='M16%207l2.2%206.3L24.5%2016l-6.3%202.2L16%2025l-2.2-6.8L7.5%2016l6.3-2.7z'%20fill='%23ffffff'/%3E%3C/svg%3E">
   <style>
     :root { --nav:#142431; --blue:#1268a5; --blue-dark:#0e5488; --bg:#f3f6f8; --line:#dbe3e7; --muted:#71808a; --ink:#17232c; --bad:#b3261e; --bad-bg:#fdecea; }
     * { box-sizing:border-box; }
@@ -39,9 +40,109 @@
       .page { padding:24px 14px; align-items:flex-start; }
       .card { padding:26px 20px 22px; }
     }
+  
+    /* ================= frosted-glass theme + micro-interactions ================= */
+    body {
+      background-color:#eef4f8;
+      background-image:
+        radial-gradient(115% 85% at 4% -4%, #e2eefa 0%, rgba(226,238,250,0) 60%),
+        radial-gradient(90% 70% at 96% 0%, #e2f5ec 0%, rgba(226,245,236,0) 56%),
+        linear-gradient(160deg, #e3eff9 0%, #d6e3ef 46%, #dcefe7 100%);
+      background-attachment:fixed;
+    }
+    .ambient { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+    .ambient-blob { position:absolute; border-radius:50%; filter:blur(58px); opacity:1; }
+    .ambient-blob-a {
+      width:52vw; height:52vw; min-width:380px; min-height:380px; left:-14vw; top:-20vh;
+      background:radial-gradient(circle at 35% 35%, rgba(44,120,190,.68), rgba(56,132,198,0) 68%);
+    }
+    .ambient-blob-b {
+      width:50vw; height:50vw; min-width:360px; min-height:360px; right:-18vw; top:4vh;
+      background:radial-gradient(circle at 60% 40%, rgba(22,158,112,.54), rgba(38,170,126,0) 70%);
+    }
+    .ambient-blob-c {
+      width:44vw; height:44vw; min-width:320px; min-height:320px; left:24vw; bottom:-22vh;
+      background:radial-gradient(circle at 50% 50%, rgba(102,114,202,.46), rgba(112,126,210,0) 72%);
+    }
+
+    /* ---------- login: glass card + micro-interactions ---------- */
+    body { display:flex; flex-direction:column; min-height:100vh; }
+    .top {
+      position:relative; z-index:2;
+      background:linear-gradient(180deg, rgba(22,41,55,.72), rgba(15,28,39,.84));
+      -webkit-backdrop-filter:blur(18px) saturate(140%);
+      backdrop-filter:blur(18px) saturate(140%);
+      border-bottom:1px solid rgba(255,255,255,.12);
+      box-shadow:0 14px 34px -26px rgba(6,16,24,.65), inset 0 -1px 0 rgba(255,255,255,.05);
+    }
+    .brand .dot { box-shadow:0 0 0 4px rgba(54,168,121,.16); }
+    .top a { transition:transform .18s cubic-bezier(.2,.8,.2,1), color .2s ease; display:inline-block; }
+    .top a:hover { transform:translateY(-1px); }
+    .page { position:relative; z-index:1; }
+    .card {
+      background:rgba(255,255,255,.68);
+      border:1px solid rgba(255,255,255,.92);
+      border-radius:16px;
+      -webkit-backdrop-filter:blur(26px) saturate(165%);
+      backdrop-filter:blur(26px) saturate(165%);
+      box-shadow:0 36px 84px -42px rgba(10,26,38,.52), inset 0 1px 0 rgba(255,255,255,.98);
+    }
+    input {
+      background:rgba(255,255,255,.68);
+      border-color:rgba(203,218,226,.9);
+      border-radius:9px;
+      -webkit-backdrop-filter:blur(8px) saturate(140%);
+      backdrop-filter:blur(8px) saturate(140%);
+    }
+    input:focus { background:rgba(255,255,255,.95); }
+    button {
+      position:relative; overflow:hidden;
+      background:linear-gradient(135deg,#1b76b6 0%,#1268a5 48%,#0e5488 100%);
+      border-radius:9px;
+      box-shadow:0 10px 24px -14px rgba(18,104,165,.6), inset 0 1px 0 rgba(255,255,255,.22);
+      transition:transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .24s ease, background .2s ease, opacity .2s ease;
+    }
+    button:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 14px 30px -14px rgba(18,104,165,.65), inset 0 1px 0 rgba(255,255,255,.22); }
+    button:active:not(:disabled) { transform:translateY(0) scale(.99); }
+    button::before {
+      content:""; position:absolute; inset:0; border-radius:inherit;
+      background:linear-gradient(115deg, transparent 32%, rgba(255,255,255,.28) 50%, transparent 68%);
+      transform:translateX(-130%); transition:transform .6s cubic-bezier(.2,.7,.2,1); pointer-events:none;
+    }
+    button:hover:not(:disabled)::before { transform:translateX(130%); }
+    .notice {
+      background:rgba(238,248,243,.82); border-color:rgba(196,230,214,.9);
+      -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+    }
+    .error {
+      background:rgba(253,236,234,.88); border-color:rgba(240,201,196,.9);
+      -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+    }
+    .hint { border-top-color:rgba(148,171,184,.28); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration:.001ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.001ms !important;
+        scroll-behavior:auto !important;
+      }
+      .btn:hover, button:hover:not(:disabled), .icon-btn:hover, .send:hover:not(:disabled),
+      .suggestion:hover, .new-chat:hover, .doc-item:hover, .session-item:hover,
+      .rag-manage:hover, .graph-node:hover, .admin-link:hover, .top-nav a:hover {
+        transform:none !important;
+      }
+      .btn::before, .btn-dark::before, .send::before, #submitBtn::before { display:none !important; }
+    }
+
   </style>
 </head>
 <body>
+  <div class="ambient" aria-hidden="true">
+    <span class="ambient-blob ambient-blob-a"></span>
+    <span class="ambient-blob ambient-blob-b"></span>
+    <span class="ambient-blob ambient-blob-c"></span>
+  </div>
   <header class="top">
     <div class="brand"><span class="dot"></span><b>HELPDESK</b><span class="sep">/</span><span class="sub">后端监视</span></div>
     <a href="/">返回对话</a>

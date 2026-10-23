@@ -1003,7 +1003,11 @@ class Handler(BaseHTTPRequestHandler):
                     raise
                 result = {"saved": True, "name": name, "document": imported["document"],
                           "chunks": imported["chunks"], "replaced": imported["replaced"],
+                          "mode": imported.get("mode", "rule"),
+                          "warnings": imported.get("warnings", []),
                           "indexed": imported["indexed"], "stats": imported["stats"]}
+                print(f"[ui] RAG import {name}: {imported['chunks']} entries "
+                      f"mode={result['mode']} indexed={result['indexed']}", flush=True)
             elif route == "/api/rag/rebuild":
                 record_access(*request_identity(payload), "POST", route)
                 documents = managed_store.load_documents()

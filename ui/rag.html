@@ -305,9 +305,134 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation:none !important; transition:none !important; }
     }
+  
+    /* ================= frosted-glass theme + micro-interactions ================= */
+    body {
+      background-color:#eef4f8;
+      background-image:
+        radial-gradient(115% 85% at 4% -4%, #e2eefa 0%, rgba(226,238,250,0) 60%),
+        radial-gradient(90% 70% at 96% 0%, #e2f5ec 0%, rgba(226,245,236,0) 56%),
+        linear-gradient(160deg, #e3eff9 0%, #d6e3ef 46%, #dcefe7 100%);
+      background-attachment:fixed;
+    }
+    .ambient { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+    .ambient-blob { position:absolute; border-radius:50%; filter:blur(58px); opacity:1; }
+    .ambient-blob-a {
+      width:52vw; height:52vw; min-width:380px; min-height:380px; left:-14vw; top:-20vh;
+      background:radial-gradient(circle at 35% 35%, rgba(44,120,190,.68), rgba(56,132,198,0) 68%);
+    }
+    .ambient-blob-b {
+      width:50vw; height:50vw; min-width:360px; min-height:360px; right:-18vw; top:4vh;
+      background:radial-gradient(circle at 60% 40%, rgba(22,158,112,.54), rgba(38,170,126,0) 70%);
+    }
+    .ambient-blob-c {
+      width:44vw; height:44vw; min-width:320px; min-height:320px; left:24vw; bottom:-22vh;
+      background:radial-gradient(circle at 50% 50%, rgba(102,114,202,.46), rgba(112,126,210,0) 72%);
+    }
+
+    /* ---------- RAG admin: frosted header, panes, cards ---------- */
+    .top {
+      position:relative; z-index:30;
+      background:rgba(255,255,255,.58);
+      -webkit-backdrop-filter:blur(20px) saturate(170%);
+      backdrop-filter:blur(20px) saturate(170%);
+      border-bottom:1px solid rgba(255,255,255,.66);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 10px 26px -26px rgba(19,45,62,.4);
+    }
+    .shell { position:relative; z-index:1; }
+    .pane {
+      background:rgba(255,255,255,.5);
+      border-color:rgba(255,255,255,.85);
+      -webkit-backdrop-filter:blur(20px) saturate(160%);
+      backdrop-filter:blur(20px) saturate(160%);
+      box-shadow:0 24px 54px -30px rgba(19,45,62,.4), 0 0 0 1px rgba(120,146,162,.07), inset 0 1px 0 rgba(255,255,255,.92);
+    }
+    .pane-head { background:rgba(255,255,255,.42); border-bottom-color:rgba(255,255,255,.55); }
+    .stat {
+      background:rgba(255,255,255,.6);
+      border-color:rgba(255,255,255,.72);
+      -webkit-backdrop-filter:blur(10px) saturate(150%);
+      backdrop-filter:blur(10px) saturate(150%);
+    }
+    .entry-card {
+      background:rgba(255,255,255,.66);
+      border-color:rgba(255,255,255,.9);
+      -webkit-backdrop-filter:blur(12px) saturate(150%);
+      backdrop-filter:blur(12px) saturate(150%);
+      box-shadow:0 16px 36px -30px rgba(19,45,62,.4), inset 0 1px 0 rgba(255,255,255,.8);
+    }
+    .entry-card:focus-within, .entry-card.dirty {
+      border-color:rgba(255,255,255,.9);
+      box-shadow:0 0 0 3px rgba(18,104,165,.1), 0 18px 38px -30px rgba(19,45,62,.45), inset 0 1px 0 rgba(255,255,255,.85);
+    }
+    .entry-title { background:rgba(255,255,255,.45); }
+    .entry-title:hover { background:rgba(255,255,255,.68); }
+    .entry-card textarea { background:rgba(255,255,255,.6); }
+    .move-panel { background:rgba(255,255,255,.46); border-color:rgba(160,190,208,.5); }
+    .modal-card {
+      background:rgba(255,255,255,.9);
+      border:1px solid rgba(255,255,255,.82);
+      -webkit-backdrop-filter:blur(26px) saturate(160%);
+      backdrop-filter:blur(26px) saturate(160%);
+      box-shadow:0 34px 80px -40px rgba(10,26,38,.55), inset 0 1px 0 rgba(255,255,255,.9);
+    }
+    .toast {
+      background:rgba(24,42,55,.85);
+      -webkit-backdrop-filter:blur(16px) saturate(150%);
+      backdrop-filter:blur(16px) saturate(150%);
+      border:1px solid rgba(255,255,255,.14);
+    }
+    .doc-item:hover { background:rgba(255,255,255,.55); transform:translateX(2px); }
+    .doc-item.active {
+      background:rgba(255,255,255,.72);
+      border-color:rgba(255,255,255,.92);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 8px 20px -16px rgba(19,45,62,.35);
+    }
+
+    /* ---------- RAG admin: button micro-interactions ---------- */
+    .btn, .icon-btn, .doc-item, .doc-delete, .retry-btn, .switch-track, .switch-thumb {
+      transition:transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .24s ease,
+                 background .2s ease, border-color .2s ease, color .2s ease, opacity .2s ease;
+    }
+    .btn:hover:not(:disabled), .doc-item:hover, .retry-btn:hover { transform:translateY(-1px); }
+    .btn:active:not(:disabled), .retry-btn:active { transform:translateY(0) scale(.986); }
+    .icon-btn:hover { transform:scale(1.06); background:rgba(255,255,255,.7); }
+    .icon-btn:active { transform:scale(.94); }
+    .doc-delete:hover { transform:scale(1.08); }
+    .btn-dark { position:relative; overflow:hidden; }
+    .btn-dark::before {
+      content:""; position:absolute; inset:0; border-radius:inherit;
+      background:linear-gradient(115deg, transparent 32%, rgba(255,255,255,.24) 50%, transparent 68%);
+      transform:translateX(-130%); transition:transform .6s cubic-bezier(.2,.7,.2,1); pointer-events:none;
+    }
+    .btn-dark:hover::before { transform:translateX(130%); }
+    .btn-dark:hover:not(:disabled) { box-shadow:0 10px 22px -12px rgba(20,36,49,.5); }
+    .switch:hover .switch-track { box-shadow:0 0 0 3px rgba(18,104,165,.12); }
+    .switch input:checked ~ .switch-track { box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 2px 6px -2px rgba(20,36,49,.35); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration:.001ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.001ms !important;
+        scroll-behavior:auto !important;
+      }
+      .btn:hover, button:hover:not(:disabled), .icon-btn:hover, .send:hover:not(:disabled),
+      .suggestion:hover, .new-chat:hover, .doc-item:hover, .session-item:hover,
+      .rag-manage:hover, .graph-node:hover, .admin-link:hover, .top-nav a:hover {
+        transform:none !important;
+      }
+      .btn::before, .btn-dark::before, .send::before, #submitBtn::before { display:none !important; }
+    }
+
   </style>
 </head>
 <body>
+  <div class="ambient" aria-hidden="true">
+    <span class="ambient-blob ambient-blob-a"></span>
+    <span class="ambient-blob ambient-blob-b"></span>
+    <span class="ambient-blob ambient-blob-c"></span>
+  </div>
   <header class="top">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">
@@ -341,7 +466,7 @@
       </div>
       <div class="toolbar-actions">
         <input id="file" type="file" accept=".pdf,.docx,.md,.txt" class="sr-only" tabindex="-1">
-        <button id="upload" class="btn btn-ghost" type="button">
+        <button id="upload" class="btn btn-ghost" type="button" title="上传后由知识条智能体按语义拆分成独立知识条">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V5M7.5 9.5L12 5l4.5 4.5"></path><path d="M5 15v3a2 2 0 002 2h10a2 2 0 002-2v-3"></path></svg>
           上传文件
         </button>
@@ -1114,7 +1239,13 @@
             body: JSON.stringify({ name: file.name, content_base64: contentBase64 })
           }, 240000);
           const chunks = data && data.chunks != null ? data.chunks : (data && data.indexed != null ? data.indexed : null);
-          showToast(chunks != null ? `已导入 ${chunks} 条知识并重建索引` : "文件已导入并重建索引", "ok");
+          const splitMode = data && data.mode === "agent"
+            ? "AI 智能拆分"
+            : (data && data.mode === "rule" ? "规则拆分" : "知识条拆分");
+          const fallback = data && data.mode === "rule" && data.warnings && data.warnings.length ? "（AI 不可用，已回退）" : "";
+          showToast(chunks != null
+            ? `已导入 ${chunks} 条知识（${splitMode}${fallback}）并重建索引`
+            : "文件已导入并重建索引", "ok");
           showToolbarMessage("", false);
           state.search = "";
           $("search").value = "";

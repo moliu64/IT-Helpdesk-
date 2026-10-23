@@ -172,15 +172,20 @@ def _seed_documents(root: Path) -> dict[str, dict[str, Any]]:
                                                  "kind": "import", "entries": []})
         index = len(document["entries"]) + 1
         salt = salts.setdefault(source, uuid4().hex[:8])
-        document["entries"].append(_import_entry(source, index, str(item["text"]), salt))
+        document["entries"].append(_import_entry(
+            source, index, str(item["text"]), salt,
+            title=str(item.get("title") or ""), steps=item.get("steps") or [],
+        ))
     return documents
 
 
-def _import_entry(source: str, index: int, text: str, salt: str) -> dict[str, Any]:
-    """Build an import chunk entry with an id that cannot collide on re-upload."""
+def _import_entry(source: str, index: int, text: str, salt: str, *,
+                  title: str = "", steps: Any = None) -> dict[str, Any]:
+    """Build an import entry with an id that cannot collide on re-upload."""
     digest = hashlib.sha1(f"{source}:{index}:{salt}".encode()).hexdigest()[:12]
-    return {"id": f"FILE-{digest}-{index:04d}", "title": source, "text": text,
-            "steps": [], "enabled": True, "updated_at": _now()}
+    cleaned_steps = [str(step).strip() for step in (steps or []) if str(step).strip()]
+    return {"id": f"FILE-{digest}-{index:04d}", "title": str(title or "").strip() or source,
+            "text": text, "steps": cleaned_steps, "enabled": True, "updated_at": _now()}
 
 
 # ---------------------------------------------------------------------------
@@ -532,35 +537,54 @@ def remove_document(document: str) -> dict[str, Any]:
             "stats": result_stats, "indexed": bool(sync.get("indexed"))}
 
 
-def import_file(path: Path) -> dict[str, Any]:
-    """Parse one uploaded file into managed entries, replacing same-name ones.
+def import_file(path: Path, *, mode: str | None = None,
+                rebuild: bool = True) -> dict[str, Any]:
+    """Split one uploaded file into knowledge entries, replacing same-name ones.
+
+    The split is produced by :mod:`src.rag.knowledge_agent`: by default it calls
+    the LLM intake agent and falls back to the deterministic rule splitter when
+    the model is unavailable.  ``mode`` (``auto|agent|rule``) overrides the
+    configured strategy.
 
     Raises ``EmptyTextError`` before touching the store when no text can be
     extracted, so a broken upload never replaces a working document.
     """
     path = Path(path)
-    from src.rag.ingest import SUPPORTED, documents_from_file
+    from src.rag.ingest import SUPPORTED, extract_text
+    from src.rag.knowledge_agent import SplitError, split_document
     if path.suffix.lower() not in SUPPORTED:
         raise StoreError("仅支持 PDF、DOCX、MD、TXT")
     try:
-        chunks = documents_from_file(path)
+        text = extract_text(path)
     except (OSError, UnicodeError, ValueError, TypeError) as exc:
         raise StoreError(f"无法解析该文件：{exc}") from exc
-    chunks = [chunk for chunk in chunks if str(chunk.get("text", "")).strip()]
-    if not chunks:
+    if not text.strip():
         raise EmptyTextError(EMPTY_TEXT_MESSAGE)
+    try:
+        split = split_document(text, title_hint=path.stem, mode=mode)
+    except SplitError as exc:
+        raise StoreError(f"无法拆分该文件：{exc}") from exc
+    split_entries = [entry for entry in split.entries if entry.text.strip()]
+    if not split_entries:
+        raise EmptyTextError(EMPTY_TEXT_MESSAGE)
+
     document = path.name
     with _LOCK:
         data = _load()
         replaced = len(data["documents"].get(document, {}).get("entries", []))
         salt = uuid4().hex[:8]
-        entries = [_import_entry(document, index, str(chunk["text"]), salt)
-                   for index, chunk in enumerate(chunks, 1)]
+        entries = [_import_entry(document, index, entry.text, salt,
+                                 title=entry.title, steps=entry.steps)
+                   for index, entry in enumerate(split_entries, 1)]
         data["documents"][document] = {"title": path.stem, "kind": "import", "entries": entries}
         _save(data)
         result_stats = _stats(data)
-    sync = sync_index()
+    if rebuild:
+        sync = sync_index()
+    else:
+        sync = {"indexed": False, "count": 0, "skipped": True}
     return {"document": document, "chunks": len(entries), "replaced": replaced,
+            "mode": split.mode, "warnings": list(split.warnings),
             "stats": result_stats, "indexed": bool(sync.get("indexed"))}
 
 

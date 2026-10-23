@@ -45,6 +45,9 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("HELPDESK_RAG_STORE", str(store_file))
     monkeypatch.setenv("HELPDESK_RAG_SOURCE_ROOT", str(source))
     monkeypatch.setenv("HELPDESK_RAG_INDEX_DIR", str(tmp_path / "index"))
+    # Keep imports deterministic/offline: the LLM intake agent is covered by
+    # tests/test_rag_splitter.py with a fake client.
+    monkeypatch.setenv("HELPDESK_RAG_INGEST_MODE", "rule")
     monkeypatch.setattr(managed_store, "_CACHE", {})
     sync_calls: list[int] = []
 

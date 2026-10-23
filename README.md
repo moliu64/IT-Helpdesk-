@@ -37,7 +37,7 @@
 **用户对话工作台**：自然语言描述问题，自动意图识别 + 本地知识库检索，支持在线搜索、工单提交与历史会话。
 
 <p align="center">
-  <img src="docs/images/user-chat.png" alt="用户对话工作台" width="820">
+  <img src="docs/images/user-chat.jpg" alt="用户对话工作台（磨砂玻璃 UI）" width="820">
 </p>
 
 **运维后台**：工单管理、LangGraph 运行监视（实时状态与事件）、RAG 库入口、用户访问记录。
@@ -46,10 +46,10 @@
   <img src="docs/images/admin-dashboard.jpg" alt="运维后台" width="700">
 </p>
 
-**RAG 知识库管理页 `/rag`**：按文档分组管理知识条，支持单条新增、编辑、删除、移动、启停，上传文件自动切片并重建索引。
+**RAG 知识库管理页 `/rag`**：按文档分组管理知识条，支持单条新增、编辑、删除、移动、启停；上传文件由「文档入库智能体」按语义拆成独立知识条后重建索引。
 
 <p align="center">
-  <img src="docs/images/rag-library.png" alt="RAG 知识库管理" width="700">
+  <img src="docs/images/rag-library.jpg" alt="RAG 知识库管理" width="700">
   <img src="docs/images/rag-mobile.png" alt="RAG 知识库管理移动端" width="200">
 </p>
 
@@ -67,11 +67,12 @@
 - **多 Agent 并行分诊**：分类、优先级/SLA、RAG 检索三路并发，路由依赖分类结果，汇总层做交叉校验并生成报告。
 - **结果是可执行的交付物**：同时输出 `report.md`（给人看）与 `report.json`（给系统用），包含给用户的回复草稿、给工程师的处理建议和自动标签。
 - **本地 RAG，零外部向量服务**：Chroma + BGE 中文 Embedding（`BAAI/bge-small-zh-v1.5`），默认离线运行；检索不到时不编造方案，明确提示人工排查。
-- **可管理的知识库**：独立的 `/rag` 管理页按文档组织知识条，支持单条 CRUD、跨文档移动、启停、搜索；上传 PDF/DOCX/MD/TXT 自动解析、切片并重建索引。
+- **可管理的知识库**：独立的 `/rag` 管理页按文档组织知识条，支持单条 CRUD、跨文档移动、启停、搜索；上传 PDF/DOCX/MD/TXT 后由**文档入库智能体**（LLM 按语义拆分 + 规则兜底）拆成一条条自包含知识条，再重建索引。
+- **知识条而不是文本碎片**：入库时优先按文档编号/标题小节拆条，每条含可检索标题、自包含正文与可执行步骤；模型漏拆时用结构规则补回，AI 不可用时自动降级，不会把整篇文档塞进一条。
 - **可靠的结构化输出**：所有 Agent 输出顶层强制为 `{"results": [...]}`，经 Pydantic 校验与有限重试，失败时返回受约束的空结果而不是崩溃。
-- **三个 Web 界面**：用户对话页、后台监视/RAG 入口、知识库管理页；后台使用服务端签名的 HttpOnly Cookie 登录（无浏览器原生 Basic 弹窗）。
+- **三个 Web 界面**：用户对话页、后台监视/RAG 入口、知识库管理页；后台使用服务端签名的 HttpOnly Cookie 登录（无浏览器原生 Basic 弹窗）。界面采用磨砂玻璃质感与按钮微动画，支持 `prefers-reduced-motion` 降级。
 - **可观测**：Agent 每一步写入 trace（节点、状态、耗时、结果数），后台实时轮询展示；RAG 检索、重建、对话的慢请求写入运行日志。
-- **可评测**：内置 24 篇 KB、64 条历史工单、32 条人工标注评测集，附带评测脚本、65 个自动化测试与 GitHub Actions。
+- **可评测**：内置 24 篇 KB、64 条历史工单、32 条人工标注评测集，附带评测脚本、82 个自动化测试与 GitHub Actions。
 - **一键部署友好**：Windows 中文控制面板一键启动源站与 Cloudflare Tunnel；同时提供 Docker Compose、Nginx、systemd 部署模板。
 
 ## 系统架构
@@ -93,6 +94,11 @@ flowchart LR
     M["汇总 / 交叉校验"]
   end
 
+  subgraph Ingest["文档入库"]
+    IA["知识条拆分智能体<br/>AI 拆分 + 规则兜底"]
+    T["导入工具<br/>import_rag.py / tool spec"]
+  end
+
   subgraph Data["数据与索引"]
     DB[("SQLite 工单与会话")]
     MS[("managed_entries.json<br/>知识条")]
@@ -112,7 +118,9 @@ flowchart LR
   MS --> V
   M --> DB
   A --> DB
-  K --> MS
+  K --> IA
+  T --> IA
+  IA --> MS
 ```
 
 分诊链路的四个 Agent 通过小型 JSON 契约解耦，可独立替换；`src/agent_graph.py` 在安装了 LangGraph 时使用真实 `StateGraph`，否则自动回退到 `ThreadPoolExecutor`，保证纯 Python 可运行。详细设计见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
@@ -125,7 +133,7 @@ flowchart LR
 | LLM | DeepSeek OpenAI 兼容接口（`deepseek-chat` / 可配置），OpenAI SDK |
 | RAG | Chroma 1.5（本地持久化） + sentence-transformers + BGE 中文小模型 |
 | 校验与配置 | Pydantic v2、PyYAML，配置集中在 `config/config.yaml` |
-| 前端 | 原生 HTML/CSS/JavaScript，单文件、无 CDN、离线可用 |
+| 前端 | 原生 HTML/CSS/JavaScript，单文件、玻璃拟态、无 CDN、离线可用 |
 | 存储 | SQLite（工单、会话、trace、访问记录）+ JSON 知识条存储 |
 | 编排 | Python 线程池（默认）/ LangGraph（可选）/ DeepSeek Harness workflow（可选） |
 | 部署 | Windows 控制面板 + Cloudflare Tunnel；Docker Compose / Nginx / systemd 模板 |
@@ -148,7 +156,7 @@ flowchart LR
 3. 启动 Cloudflare Tunnel（若已配置）；
 4. 自动打开用户端页面。
 
-控制面板以无控制台窗口方式运行，不会残留终端窗口；关闭面板不会停止项目，停止请点击「停止项目」。后台入口：`http://127.0.0.1:8787/backend`，RAG 管理页：`http://127.0.0.1:8787/rag`（默认均需管理员登录）。
+控制面板以无控制台窗口方式运行：双击后由静默启动器拉起，不会出现终端窗口；重复双击只会把已有面板切换到前台（单实例），不会叠加多个 PowerShell 面板。启动完成后可直接关闭面板，项目继续在后台运行；再次打开面板可查看状态，只有点击「停止项目」才会停止服务。后台入口：`http://127.0.0.1:8787/backend`，RAG 管理页：`http://127.0.0.1:8787/rag`（默认均需管理员登录）。
 
 ### 方式二：手动安装与启动
 
@@ -194,7 +202,7 @@ python -m src.main --input data/raw/sample_ticket.txt
 ### 测试与代码检查
 
 ```bash
-python -m pytest tests -q        # 65 passed
+python -m pytest tests -q        # 82 passed
 python -m ruff check src scripts tests ui
 python -m compileall -q src scripts ui
 ```
@@ -222,10 +230,26 @@ GitHub Actions 会在 Python 3.10 / 3.11 / 3.12 上执行同样的测试与 Ruff
 
 - 左侧按文档分组：知识库 KB / 历史工单 / 导入文件 / 手工；右侧展示该文档下的知识条；
 - 每条知识条可单独**保存、删除、移动（到已有或新建文档）、启用/停用**，修改后自动重建 Chroma 索引并立即用于对话检索；
-- 支持跨文档搜索、新建知识条、重建索引；上传 PDF/DOCX/MD/TXT 会自动解析、切片、写入知识条并重建索引；
-- 同名文件重新上传会替换旧知识条；扫描版 PDF 等提取不到文本时返回明确提示，不会产生空知识条；
+- 支持跨文档搜索、新建知识条、重建索引；
+- 上传 PDF/DOCX/MD/TXT 时由**文档入库智能体**（`src/rag/knowledge_agent.py`）拆分，而不是按固定字数切片：
+  - 优先按文档编号/标题小节拆成一条条**自包含知识条**：一个故障现象/排查流程/操作说明对应一条；
+  - 每条生成具体标题（如“Crontab 输出堆积导致磁盘爆满”）、完整正文与可执行步骤，检索时直接命中知识条；
+  - 模型输出经 Pydantic 校验并重试；模型漏拆的编号小节由结构规则补回；AI 不可用时自动降级为纯规则拆分（`mode=rule`）；
+- 同名文件重新上传会整体替换旧知识条；扫描版 PDF 等提取不到文本时返回明确提示，不会产生空知识条；
 - 停用的知识条保留在库中但不参与检索；
 - 知识条持久化在 `data/knowledge/managed_entries.json`（首次运行自动从 KB、历史工单、imports 灌入），可在测试环境用 `HELPDESK_RAG_STORE` / `HELPDESK_RAG_INDEX_DIR` 隔离。
+
+**专用导入工具**：如果不想打开网页，可以用 `scripts/import_rag.py` 或工具契约 `src/rag/import_tool.py`：
+
+```powershell
+# 先预览拆分结果（不落库、不重建索引）
+.venv\Scripts\python.exe scripts\import_rag.py "C:\path\运维手册.pdf" --dry-run
+
+# 用 AI 智能体拆分并导入（失败自动回退规则）
+.venv\Scripts\python.exe scripts\import_rag.py "C:\path\运维手册.pdf" --mode agent
+```
+
+入库智能体的设计、完整 Prompt、工具 Schema 与验证记录见 [docs/RAG_INGEST_AGENT.md](docs/RAG_INGEST_AGENT.md)。
 
 ### 数据与索引
 
@@ -252,6 +276,7 @@ GitHub Actions 会在 Python 3.10 / 3.11 / 3.12 上执行同样的测试与 Ruff
 | `HELPDESK_HOST` / `HELPDESK_PORT` | 否 | 默认 `127.0.0.1:8787` |
 | `HELPDESK_DB_PATH` | 否 | SQLite 数据库路径，默认 `ui/helpdesk.db` |
 | `HELPDESK_RAG_PREWARM` | 否 | `1` 启动前同步预热模型（生产默认），`background` 后台预热，`0` 不预热 |
+| `HELPDESK_RAG_INGEST_MODE` | 否 | 文档入库拆分模式：`auto`（默认，AI 优先/规则兜底）/ `agent` / `rule` |
 | `HELPDESK_RAG_STORE` | 否 | 知识条存储路径，默认 `data/knowledge/managed_entries.json` |
 | `HELPDESK_RAG_INDEX_DIR` | 否 | Chroma 索引目录，默认取 `config.yaml` 的 `rag.index_dir` |
 | `HELPDESK_RAG_SOURCE_ROOT` | 否 | 首次灌入知识条时的源数据根目录，默认仓库根 |
@@ -266,6 +291,7 @@ GitHub Actions 会在 Python 3.10 / 3.11 / 3.12 上执行同样的测试与 Ruff
 - `llm`：模型、温度、超时；
 - `embedding`：`provider: local`、BGE 模型名；
 - `rag.index_dir`：向量索引目录；
+- `rag.ingest`：文档入库智能体配置（`mode`、`max_entry_chars`、`window_chars`、`max_entries`）；
 - `helpdesk.categories`：问题分类枚举；
 - `helpdesk.teams`：支持组枚举；
 - `helpdesk.sla_map`：P1–P4 对应响应时限。
@@ -305,7 +331,7 @@ Agent 的类别、团队、SLA 全部从配置读取，无硬编码。
 | GET | `/api/rag/library` / `/api/rag/entries` | 文档与知识条 |
 | POST | `/api/rag/entries/create` / `update` / `delete` / `move` | 知识条 CRUD 与移动 |
 | POST | `/api/rag/documents/delete` | 删除文档及其知识条 |
-| POST | `/api/rag/import` | 上传文件（自动解析、切片、重建索引） |
+| POST | `/api/rag/import` | 上传文件（智能体拆分为知识条、重建索引；响应含 `mode` / `warnings`） |
 | POST | `/api/rag/rebuild` | 从知识条存储重建索引 |
 | GET/DELETE | `/api/rag/files` | 上传文件列表 / 删除文件 |
 | GET | `/api/rag/status` / `/api/rag/search` / `/api/rag/documents` | 状态 / 检索 / 兼容文档列表 |
@@ -330,7 +356,7 @@ Agent 的类别、团队、SLA 全部从配置读取，无硬编码。
 
 ### 自动化测试与浏览器验收
 
-- `pytest`：**65 passed**（Agent 契约、RAG、安全、用户页、知识库 CRUD 等）；
+- `pytest`：**82 passed**（Agent 契约、RAG 拆分/导入、安全、用户页、知识库 CRUD 等）；
 - Ruff：`src scripts tests ui` 全部通过；
 - Playwright + Edge 真浏览器验收：
   - 后台登录、流程图、RAG 文档、会话持久化：**11/11**；
@@ -340,7 +366,7 @@ Agent 的类别、团队、SLA 全部从配置读取，无硬编码。
 
 ### RAG 性能
 
-模型与索引在服务启动时预热后，单次检索约 **8–40 ms**；未预热时首次检索需要加载 BGE/Chroma 约 6 秒。知识条修改后重建索引约 **1–2 秒**（93 条知识，模型已预热）。
+模型与索引在服务启动时预热后，单次检索约 **8–40 ms**；未预热时首次检索需要加载 BGE/Chroma 约 6 秒。知识条修改后重建索引约 **1–2 秒**（108 条知识，模型已预热）。
 
 ## 项目结构
 
@@ -356,20 +382,21 @@ Agent 的类别、团队、SLA 全部从配置读取，无硬编码。
 ├── deploy/060115.top/           # Cloudflare Tunnel / Docker / Nginx / systemd 模板
 ├── docs/
 │   ├── ARCHITECTURE.md          # 架构与组件说明
+│   ├── RAG_INGEST_AGENT.md      # 文档入库智能体：Prompt、工具与验证记录
 │   ├── CHANGELOG.md             # 完整变更记录
 │   ├── 启动与部署说明.md         # 中文启动、面板与线上部署说明
 │   └── images/                  # README 截图
-├── scripts/                     # build_index / evaluate / start / 造数脚本
+├── scripts/                     # build_index / evaluate / import_rag / start / 造数脚本
 ├── src/
 │   ├── agents/                  # 分类、优先级、方案检索、路由与 prompts
-│   ├── rag/                     # vector_store、managed_store、ingest
+│   ├── rag/                     # vector_store、managed_store、ingest、knowledge_agent、import_tool
 │   ├── agent_graph.py           # 可选 LangGraph / 线程回退编排
 │   ├── intent.py                # 对话意图识别
 │   ├── ticket_parser.py         # 文本/JSON 工单解析
 │   ├── report.py                # 汇总、交叉校验与 Markdown/JSON 报告
 │   ├── llm_client.py            # 统一 LLM JSON 客户端（重试/超时/连接复用）
 │   └── main.py                  # CLI 入口
-├── tests/                       # 65 个自动化测试
+├── tests/                       # 82 个自动化测试
 ├── ui/
 │   ├── index.html               # 用户对话工作台
 │   ├── backend.html             # 运维后台
@@ -456,5 +483,6 @@ python -m compileall -q src scripts ui
 
 ## 最近更新
 
+- **2026-10-23**：RAG 文档入库改为「文档入库智能体」按语义拆成独立知识条（AI 优先、规则兜底、覆盖校验），不再按 900 字固定切片；新增专用导入工具 `scripts/import_rag.py` / `src/rag/import_tool.py`，并用两篇真实运维文档完成端到端验证；索引时把标题与正文一起向量化，显著提升“按故障名检索”的命中率；四个 Web 界面统一升级磨砂玻璃质感与按钮微动画（支持 reduced-motion）；控制面板改为静默单实例启动器，双击不再留下/叠加 PowerShell 终端面板，启动后可关闭面板让项目后台常驻，只有点击「停止项目」才停止服务。
 - **2026-10-22**：新增独立 RAG 知识库管理页 `/rag`，知识条支持单条增删改迁与启停；上传文件自动解析、切片并重建索引；引入持久化知识条存储与索引隔离变量；后台登录改为 Cookie 会话，修复认证弹窗、流程图为空、库内文档无法查看；重做用户主页面；启动/停止脚本健壮性修复。
 - 完整历史见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。

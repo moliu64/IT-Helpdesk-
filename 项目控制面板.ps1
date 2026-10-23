@@ -15,6 +15,8 @@ try {
     Add-Type -Name Win32Console -Namespace Helpdesk -MemberDefinition @'
 [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 '@ -ErrorAction Stop
     $consoleHandle = [Helpdesk.Win32Console]::GetConsoleWindow()
     if ($consoleHandle -ne [IntPtr]::Zero) {
@@ -22,6 +24,27 @@ try {
     }
 } catch {
     # 无控制台句柄时无需处理。
+}
+
+# ---------------------------------------------------------------------------
+# 单实例保护：重复双击 .bat 时不再叠加多个面板窗口，而是把已有面板恢复到前台。
+# ---------------------------------------------------------------------------
+$script:instanceMutex = $null
+$createdNew = $true
+try {
+    $script:instanceMutex = New-Object System.Threading.Mutex($true, "Local\HelpdeskControlPanelInstance", [ref]$createdNew)
+} catch {
+    $createdNew = $true
+}
+if (-not $createdNew) {
+    try {
+        $existingWindow = [Helpdesk.Win32Console]::FindWindow($null, "IT 运维工单智能体 - 控制面板")
+        if ($existingWindow -ne [IntPtr]::Zero) {
+            [void][Helpdesk.Win32Console]::ShowWindow($existingWindow, 9)  # SW_RESTORE
+            [void][Helpdesk.Win32Console]::SetForegroundWindow($existingWindow)
+        }
+    } catch { }
+    exit 0
 }
 
 try {
@@ -89,9 +112,9 @@ $title.Location = New-Object -TypeName System.Drawing.Point -ArgumentList @(28, 
 $form.Controls.Add($title)
 
 $description = New-Object System.Windows.Forms.Label
-$description.Text = '一键启动源站与 Cloudflare Tunnel。关闭此窗口不会停止项目，必须点击“停止项目”。'
+$description.Text = '一键启动源站与 Cloudflare Tunnel。启动后可关闭此面板，项目继续在后台运行；再次打开面板可查看状态，只有点击“停止项目”才会停止服务。'
 $description.AutoSize = $false
-$description.Size = New-Object -TypeName System.Drawing.Size -ArgumentList @(490, 42)
+$description.Size = New-Object -TypeName System.Drawing.Size -ArgumentList @(490, 50)
 $description.Location = New-Object -TypeName System.Drawing.Point -ArgumentList @(30, 62)
 $description.ForeColor = [System.Drawing.Color]::DimGray
 $form.Controls.Add($description)
@@ -334,6 +357,12 @@ $form.Add_FormClosed({
     try {
         $timer.Stop()
         $timer.Dispose()
+    } catch { }
+    try {
+        if ($script:instanceMutex) {
+            $script:instanceMutex.ReleaseMutex()
+            $script:instanceMutex.Dispose()
+        }
     } catch { }
 })
 

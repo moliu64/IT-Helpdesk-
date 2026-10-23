@@ -26,7 +26,10 @@ The same process also hosts three web surfaces:
 | `src/intent.py` | Rule-first conversation intent detection with LLM fallback |
 | `src/rag/vector_store.py` | Build and query the local Chroma index; index dir/env overrides |
 | `src/rag/managed_store.py` | Persistent knowledge-entry store (seed, CRUD, move, import, reindex) |
-| `src/rag/ingest.py` | PDF/DOCX/Markdown/TXT extraction and overlapping chunking |
+| `src/rag/ingest.py` | PDF/DOCX/Markdown/TXT extraction; semantic entry splitting for seeds |
+| `src/rag/knowledge_agent.py` | Document-intake agent: LLM semantic splitting + rule fallback + coverage guard |
+| `src/rag/import_tool.py` | Callable import tool contract (`import_document_to_rag`) and preview |
+| `scripts/import_rag.py` | CLI wrapper around the import tool (dry-run / agent / rule / no-rebuild) |
 | `ui/server.py` | Single HTTP process: static pages, JSON APIs, admin auth, audit log |
 | `ui/index.html` / `backend.html` / `rag.html` / `login.html` | Self-contained front-end pages (no external assets) |
 
@@ -53,7 +56,9 @@ The same process also hosts three web surfaces:
 1. `managed_store` seeds itself from existing KB articles, historical tickets, and imported files on first use.
 2. The `/rag` page reads documents/entries and sends CRUD/move/upload requests to `/api/rag/*`.
 3. Every mutation persists atomically to `data/knowledge/managed_entries.json` and rebuilds the Chroma index from the enabled entries.
-4. Uploads are parsed into chunks, replace same-name documents, and are indexed immediately; empty/scanned files return a friendly 400 instead of creating empty entries.
+4. Uploads are extracted, split by the **document-intake agent** (`src/rag/knowledge_agent.py`) into self-contained knowledge entries, replace same-name documents, and are indexed immediately; empty/scanned files return a friendly 400 instead of creating empty entries.
+5. Agent mode calls the LLM with the prompt from `src/agents/prompts.py`, validates `{"results":[...]}` with Pydantic, retries once on invalid output, and merges missing structural sections back via the deterministic rule splitter. `auto` falls back to pure rule splitting; `agent` surfaces failures; `rule` never calls a model.
+6. The Chroma document text is `title + "\n" + body` so a knowledge entry can be retrieved by its topic name (e.g. "Too many open files") as well as by body content; UI/store text remains unchanged.
 
 ## Data and Configuration
 
@@ -62,7 +67,10 @@ The same process also hosts three web surfaces:
 - Managed knowledge entries live in `data/knowledge/managed_entries.json` (ignored by Git, seeded automatically).
 - `scripts/build_index.py` generates the ignored `data/tickets/index/` Chroma directory.
 - Runtime settings are in `config/config.yaml`; secrets are environment variables only.
-- Test isolation: `HELPDESK_RAG_STORE`, `HELPDESK_RAG_INDEX_DIR`, `HELPDESK_RAG_SOURCE_ROOT`, and `HELPDESK_DB_PATH` can point a test server at temporary data.
+- Test isolation: `HELPDESK_RAG_STORE`, `HELPDESK_RAG_INDEX_DIR`, `HELPDESK_RAG_SOURCE_ROOT`, `HELPDESK_RAG_INGEST_MODE`, and `HELPDESK_DB_PATH` can point a test server at temporary data.
+- Document-intake settings live under `rag.ingest` in `config/config.yaml`; the CLI/tool can also override the split mode per import.
+
+See [RAG_INGEST_AGENT.md](RAG_INGEST_AGENT.md) for the full prompt, tool schema, and verification record.
 
 ## Extension Points
 

@@ -9,6 +9,7 @@ HttpOnly cookie grants access until it expires or the password rotates.
 import base64
 import http.client
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -102,8 +103,11 @@ def test_login_page_is_offline_and_self_contained(monkeypatch, tmp_path):
             assert "管理后台登录" in html
             assert 'id="username"' in html and 'id="password"' in html
             assert "autofocus" in html
-            # No external assets: the page must work on an offline LAN.
-            assert "http://" not in html and "https://" not in html
+            # No external assets: the page must work on an offline LAN.  An
+            # inline SVG favicon may reference the standard XML namespace
+            # (http://www.w3.org/2000/svg), which is not a network request.
+            assert not re.search(r'(?:src|href)\s*=\s*["\']https?://', html)
+            assert "@import" not in html
     finally:
         _stop_server(http_server, thread)
 

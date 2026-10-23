@@ -2,6 +2,24 @@
 
 本文件记录项目从合同审查改造为 IT 运维工单智能体之后的主要变更。README 只保留最近更新摘要，完整历史在此维护。
 
+## 2026-10-23：RAG 文档入库智能体（知识条语义拆分）
+
+- 修复 RAG 文档导入“直接按 900 字切块”的问题：上传 PDF/DOCX/MD/TXT 后不再生成文件名 + 半截话的 `FILE-...` 碎片，而是由新增的「文档入库智能体」按文档结构拆成一条条自包含知识条，每条包含具体标题、完整正文（现象/排查与解决）和可执行步骤。
+- 新增 `src/rag/knowledge_agent.py`：LLM 智能体拆分（Prompt 位于 `src/agents/prompts.py` 的 `KNOWLEDGE_SPLIT_SYSTEM`）、Pydantic 校验与重试、长文档分窗、去重、AI 结果与规则结构的覆盖校验；支持 `auto`（默认，AI 优先/规则兜底）、`agent`、`rule` 三种模式，配置在 `rag.ingest`，可用 `HELPDESK_RAG_INGEST_MODE` 覆盖。
+- 新增专用导入工具 `src/rag/import_tool.py`（`import_document_to_rag` function-calling schema、预览、落库）与命令行 `scripts/import_rag.py`（`--dry-run` / `--mode` / `--no-rebuild` / `--store` / `--index-dir` / `--json`）。
+- 接入现有链路：`managed_store.import_file()` 先拆分再原子替换同名文档；`POST /api/rag/import` 新增返回 `mode`/`warnings` 并保持原有字段兼容；`/rag` 页面上传 Toast 区分“AI 智能拆分 / 规则拆分 / AI 不可用已回退”；索引文本改为“标题 + 正文”，按故障名（如“Too many open files”“crontab 导致磁盘爆满”）检索的 Top-1 命中明显提升。
+- 种子导入同样改为结构拆分（`documents_from_file`），无结构长文本按句子边界拆到 `max_entry_chars`；PDF 物理换行合并，`steps` 从显式列表或“排查与解决”段落抽取。
+- 验证：`pytest tests -q` **82 passed**（新增拆分器/导入工具测试），Ruff、compileall 通过；用真实文档 `新建 Microsoft Word 文档.docx`（10 条编号故障）与 `新建 Microsoft Word 文档 (2).pdf`（10 条编号故障、2 页）在真实 LLM + 生产知识库验证：两篇各拆成 10 条知识条，PDF 原 3 个碎片被替换；HTTP `/api/rag/library`、`/api/rag/entries`、`/api/rag/search` 均验证通过；真实索引 108 条知识，`crontab 导致磁盘爆满`、`文件系统变为只读` 等查询 Top-1 命中且相关度为“高”。
+- 文档：新增 `docs/RAG_INGEST_AGENT.md`（完整 Prompt、工具 Schema、兜底/覆盖策略与验证记录），同步 README、ARCHITECTURE。
+
+## 2026-10-23：磨砂玻璃 UI 与静默单实例控制面板
+
+- 四个 Web 界面统一升级为磨砂玻璃（glassmorphism）视觉：环境渐变背景 + 多层模糊色块，侧栏/顶栏/卡片/输入框/弹窗/表格等表面使用半透明白 + `backdrop-filter` 模糊 + 柔和高光与阴影；按钮增加 hover 上浮、按下回弹、主按钮扫光等微动画，并支持 `prefers-reduced-motion` 降级。仅改动 CSS 与装饰元素，未改变任何页面 ID、JS 逻辑与既有功能。
+- 控制面板新增静默启动器 `scripts/launch_panel.vbs`，`项目控制面板.bat` 改用 `wscript` 启动，不再创建任何可见/隐藏的控制台终端窗口；面板脚本增加单实例互斥锁，重复双击只会把已有面板恢复到前台，不再叠加多个 PowerShell 面板窗口。
+- 面板生命周期明确为“启动后可关闭、项目后台常驻”：关闭面板不会停止服务，再次打开只查看状态，只有点击「停止项目」才会停止项目；关闭面板时不会中断仍在后台执行的启动/停止流程。
+- 兼容性：`.ps1` 保持 UTF-8 BOM，`.bat`/`.vbs` 使用 CRLF；面板脚本通过 PowerShell AST 语法检查。
+- 验证：面板端到端 16/16 通过（单实例、无终端窗口、关闭面板服务不断、启动中关闭面板仍能后台完成启动）；玻璃 UI 模拟检查 19/19、隔离环境真实接口 15/15 通过，`node --check` 4/4，全量测试通过。
+
 ## 2026-10-22：RAG 知识库管理页与知识条增删改迁
 
 - 新增独立的 RAG 知识库管理页 `/rag`（后台点击「管理 RAG 知识库」在新标签页打开）：左侧按文档分组（知识库 KB / 历史工单 / 导入文件 / 手工），右侧按文档展示可编辑的知识条；支持单条新增、编辑、删除、移动（可移动到已有或新建文档）、启用/停用，跨文档搜索、上传文件、重建索引与统计。

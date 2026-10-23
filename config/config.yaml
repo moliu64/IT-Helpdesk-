@@ -10,6 +10,11 @@ embedding:
   model: "BAAI/bge-small-zh-v1.5"      # 本地中文 embedding（sentence-transformers 自动下载）
 rag:
   index_dir: "data/tickets/index"
+  ingest:                         # 文档上传 → 知识条拆分（RAG 文档入库智能体）
+    mode: "auto"                  # auto：AI 优先，失败回退规则；agent：只用 AI；rule：只用规则
+    max_entry_chars: 1200         # 单条正文超过该长度时继续拆分
+    window_chars: 6000            # 单次发给模型的文档片段上限
+    max_entries: 200              # 单篇文档最多知识条数
 helpdesk:
   teams: [网络组, 桌面支持组, 应用组, 安全组, 账号权限组, 其他]
   categories: [账号与登录, 网络连接, 硬件设备, 软件应用, 权限申请, 邮件通讯, 安全事件, 其他]
