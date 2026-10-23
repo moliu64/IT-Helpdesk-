@@ -1,0 +1,1232 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>RAG 知识库管理 · Helpdesk</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%23142431'/%3E%3Cpath%20d='M16%207l2.2%206.3L24.5%2016l-6.3%202.2L16%2025l-2.2-6.8L7.5%2016l6.3-2.7z'%20fill='%23ffffff'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg:#f3f6f8; --surface:#ffffff; --line:#dbe3e7; --line-soft:#eaf0f3;
+      --ink:#16242d; --ink-2:#354750; --muted:#6c7d87; --faint:#9aa6ae;
+      --accent:#142431; --accent-hover:#0d1a24; --blue:#1268a5;
+      --green:#2f9e76; --amber:#d78f3c; --red:#b04747;
+      --shadow-sm:0 1px 2px rgba(16,42,58,.05);
+      --shadow-md:0 2px 10px rgba(16,42,58,.07), 0 1px 2px rgba(16,42,58,.04);
+      --shadow-lg:0 24px 60px -24px rgba(10,26,38,.5);
+      --font:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+      --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+    }
+    * { box-sizing:border-box; }
+    html, body { height:100%; }
+    body { margin:0; height:100dvh; overflow:hidden; background:var(--bg); color:var(--ink); font:14px/1.55 var(--font); -webkit-font-smoothing:antialiased; }
+    [hidden] { display:none !important; }
+    button { font:inherit; color:inherit; }
+    a { color:var(--blue); }
+    :focus-visible { outline:2px solid rgba(18,104,165,.8); outline-offset:2px; border-radius:6px; }
+    ::selection { background:rgba(18,104,165,.16); }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+    svg { display:block; }
+
+    /* ---------- header ---------- */
+    .top {
+      flex:none; min-height:64px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+      padding:10px 22px; background:var(--surface); border-bottom:1px solid var(--line);
+      position:relative; z-index:20;
+    }
+    .brand { display:flex; align-items:center; gap:11px; min-width:0; }
+    .brand-mark {
+      width:36px; height:36px; flex:none; border-radius:10px; color:#fff;
+      display:grid; place-items:center;
+      background:linear-gradient(145deg,#1c3747,#0f2230);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 2px 6px -2px rgba(16,42,58,.35);
+    }
+    .brand-mark svg { width:18px; height:18px; }
+    .brand-text h1 { margin:0; font-size:15px; font-weight:650; letter-spacing:.01em; }
+    .brand-text p { margin:3px 0 0; font-size:11.5px; color:var(--muted); }
+    .top-right { display:flex; align-items:center; gap:10px; margin-left:auto; flex-wrap:wrap; }
+    .stats { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .stat {
+      display:inline-flex; align-items:baseline; gap:5px; padding:5px 11px;
+      background:#f2f6f8; border:1px solid #e4ebef; border-radius:999px;
+      color:var(--muted); font-size:11.5px; white-space:nowrap;
+    }
+    .stat b { color:var(--ink); font-size:12.5px; font-weight:650; }
+
+    /* ---------- buttons / inputs ---------- */
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center; gap:6px;
+      padding:8px 14px; border:1px solid transparent; border-radius:9px;
+      font-size:13px; font-weight:600; cursor:pointer; text-decoration:none;
+      transition:background .16s ease, border-color .16s ease, box-shadow .16s ease, color .16s ease;
+      white-space:nowrap;
+    }
+    .btn svg { width:15px; height:15px; }
+    .btn-dark { background:var(--accent); color:#fff; box-shadow:0 1px 2px rgba(16,42,58,.16); }
+    .btn-dark:hover { background:var(--accent-hover); }
+    .btn-dark:disabled { opacity:.6; cursor:not-allowed; }
+    .btn-ghost { background:#fff; color:var(--ink-2); border-color:#dde5ea; }
+    .btn-ghost:hover { background:#f6f9fa; border-color:#c7d4dc; }
+    .btn-ghost:disabled { opacity:.6; cursor:not-allowed; }
+    .btn-danger-ghost { background:#fff; color:var(--red); border-color:#eed6d6; }
+    .btn-danger-ghost:hover { background:#fdf4f4; border-color:#e3bfbf; }
+    .btn-sm { padding:5px 10px; font-size:12px; border-radius:7px; }
+    .btn-sm svg { width:13px; height:13px; }
+    .icon-btn {
+      width:32px; height:32px; flex:none; display:grid; place-items:center;
+      border:0; border-radius:8px; background:transparent; color:var(--muted); cursor:pointer;
+      transition:background .15s ease, color .15s ease;
+    }
+    .icon-btn svg { width:17px; height:17px; }
+    .icon-btn:hover { background:#f1f5f7; color:var(--ink); }
+    input[type="text"], input[type="search"], textarea, select {
+      font:inherit; font-size:13.5px; color:var(--ink); background:#fff;
+      border:1px solid #dfe6ea; border-radius:8px; padding:8px 11px; outline:none;
+      transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    input[type="text"]:focus, input[type="search"]:focus, textarea:focus, select:focus {
+      border-color:#9fb8c8; box-shadow:0 0 0 3px rgba(18,104,165,.12);
+    }
+    textarea { resize:vertical; line-height:1.6; }
+
+    /* ---------- shell / toolbar ---------- */
+    .shell { height:calc(100dvh - 65px); display:flex; flex-direction:column; min-height:0; padding:14px 22px 18px; gap:12px; }
+    .toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .search-box { position:relative; flex:1 1 300px; max-width:440px; min-width:200px; }
+    .search-box svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); width:15px; height:15px; color:var(--faint); pointer-events:none; }
+    .search-box input { width:100%; padding-left:33px; background:#fff; }
+    .toolbar-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+    .toolbar-msg {
+      display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:9px;
+      background:#fdf4f4; border:1px solid #eed6d6; color:var(--red); font-size:12.5px;
+    }
+    .toolbar-msg.ok { background:#edf9f3; border-color:#c4e6d6; color:#257a5b; }
+
+    /* ---------- panes ---------- */
+    .panes { flex:1; min-height:0; display:grid; grid-template-columns:322px minmax(0,1fr); gap:14px; }
+    .pane {
+      min-height:0; display:flex; flex-direction:column; overflow:hidden;
+      background:var(--surface); border:1px solid var(--line); border-radius:12px;
+      box-shadow:var(--shadow-sm);
+    }
+    .pane-head {
+      flex:none; min-height:52px; display:flex; align-items:center; gap:10px;
+      padding:10px 16px; border-bottom:1px solid var(--line-soft); background:#fff;
+    }
+    .pane-head .pane-title { font-size:13px; font-weight:650; }
+    .pane-head .pane-count { margin-left:auto; font-size:11.5px; color:var(--faint); }
+    .doc-list, .entries { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; }
+    .doc-list { padding:8px; }
+    .entries { padding:14px 16px 20px; }
+
+    /* ---------- document list ---------- */
+    .doc-group + .doc-group { margin-top:10px; }
+    .group-label {
+      display:flex; align-items:center; gap:7px; padding:6px 8px 4px;
+      font-size:10.5px; font-weight:600; letter-spacing:.06em; color:var(--faint); text-transform:uppercase;
+    }
+    .group-count { font-size:10px; font-weight:500; color:var(--faint); background:#f1f5f7; border-radius:999px; padding:1px 6px; }
+    .doc-item {
+      display:flex; align-items:center; gap:4px; width:100%; padding:8px 9px;
+      border:1px solid transparent; border-radius:9px; background:transparent;
+      cursor:pointer; text-align:left; transition:background .14s ease, border-color .14s ease;
+    }
+    .doc-item + .doc-item { margin-top:2px; }
+    .doc-item:hover { background:#f4f8fa; }
+    .doc-item.active { background:#eef4f8; border-color:#d9e6ee; }
+    .doc-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+    .doc-title { font-size:13px; color:var(--ink-2); font-weight:550; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .doc-item.active .doc-title { color:var(--ink); }
+    .doc-meta { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .doc-delete {
+      flex:none; width:26px; height:26px; display:grid; place-items:center;
+      border:0; border-radius:6px; background:transparent; color:var(--faint);
+      opacity:0; cursor:pointer; transition:opacity .15s ease, background .15s ease, color .15s ease;
+    }
+    .doc-delete svg { width:13px; height:13px; }
+    .doc-item:hover .doc-delete, .doc-item.active .doc-delete, .doc-delete:focus-visible { opacity:1; }
+    .doc-delete:hover { background:#f6e6e6; color:var(--red); }
+
+    /* ---------- entries ---------- */
+    .entries-head { align-items:flex-start; }
+    .entries-head .pane-title { font-size:14px; }
+    .entries-head .pane-sub { margin-top:3px; font-size:11.5px; color:var(--muted); }
+    .mobile-doc-select { display:none; margin-left:auto; min-width:180px; max-width:56%; }
+    .mobile-doc-select select { width:100%; }
+    .entries-head-actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+    .entry-card {
+      border:1px solid var(--line); border-radius:11px; background:#fff;
+      padding:12px 14px; margin-bottom:12px; box-shadow:var(--shadow-sm);
+      transition:border-color .15s ease, box-shadow .15s ease;
+    }
+    .entry-card:last-child { margin-bottom:0; }
+    .entry-card:focus-within { border-color:#b8cedd; box-shadow:0 0 0 3px rgba(18,104,165,.08); }
+    .entry-card.dirty { border-color:#b8cedd; box-shadow:0 0 0 3px rgba(18,104,165,.1); }
+    .entry-card.highlight { animation:entry-flash 1.6s ease; }
+    @keyframes entry-flash { 0% { background:#eaf5fd; border-color:#9dc0dc; } 100% { background:#fff; border-color:var(--line); } }
+    .entry-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .entry-title {
+      flex:1; min-width:160px; font-size:13.5px; font-weight:600; color:var(--ink);
+      padding:7px 10px; border-color:transparent; background:#f7fafb;
+    }
+    .entry-title:hover { border-color:#e2eaee; }
+    .entry-title:focus { background:#fff; }
+    .entry-doc {
+      max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      font-size:11px; color:var(--blue); background:#eef6fc; border:1px solid #dcebf7;
+      border-radius:999px; padding:3px 9px;
+    }
+    .entry-body { display:grid; gap:9px; margin-top:10px; }
+    .field { display:flex; flex-direction:column; gap:5px; min-width:0; }
+    .field > span { font-size:11px; font-weight:600; color:#5b6c77; letter-spacing:.02em; }
+    .entry-card textarea { width:100%; font-family:var(--mono); font-size:12.5px; line-height:1.65; background:#fbfcfd; min-height:64px; }
+    .entry-text { min-height:86px; }
+    .entry-steps { min-height:58px; }
+    .entry-foot {
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      margin-top:11px; padding-top:10px; border-top:1px dashed var(--line-soft);
+    }
+    .entry-meta { font-size:11px; color:var(--faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:52%; }
+    .entry-actions { margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .move-panel {
+      margin-top:10px; padding:11px 12px 10px; border:1px dashed #cfe0ea; border-radius:9px;
+      background:#f5f9fc; display:flex; flex-direction:column; gap:9px;
+    }
+    .move-fields { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .move-msg { margin:0; min-height:16px; font-size:11.5px; color:var(--muted); }
+    .move-msg.err { color:var(--red); }
+    .move-actions { display:flex; justify-content:flex-end; gap:8px; }
+
+    .switch { position:relative; display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted); cursor:pointer; user-select:none; flex:none; }
+    .switch input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; z-index:2; }
+    .switch-track { position:relative; width:32px; height:19px; flex:none; border-radius:999px; background:#dfe5e9; transition:background .18s ease; }
+    .switch-thumb { position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(16,42,58,.28); transition:transform .18s ease; }
+    .switch input:checked ~ .switch-track { background:var(--accent); }
+    .switch input:checked ~ .switch-track .switch-thumb { transform:translateX(13px); }
+    .switch input:focus-visible ~ .switch-track { box-shadow:0 0 0 3px rgba(18,104,165,.25); }
+
+    /* ---------- empty / skeleton / error ---------- */
+    .empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:44px 18px; text-align:center; color:var(--muted); font-size:12.5px; line-height:1.7; }
+    .empty .empty-icon { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; background:#f1f6f8; color:#a9bcc8; margin-bottom:2px; }
+    .empty .empty-icon svg { width:20px; height:20px; }
+    .empty strong { color:var(--ink-2); font-size:13.5px; font-weight:600; }
+    .empty-actions { display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; justify-content:center; }
+    .skeleton { position:relative; overflow:hidden; background:#eef3f6; border-radius:8px; }
+    .skeleton::after { content:""; position:absolute; inset:0; transform:translateX(-100%); background:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent); animation:shimmer 1.25s infinite; }
+    @keyframes shimmer { to { transform:translateX(100%); } }
+    .skeleton-row { height:46px; margin:6px 2px; }
+    .skeleton-card { height:150px; margin-bottom:12px; border-radius:11px; }
+    .inline-error {
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      padding:12px 14px; border:1px solid #eed6d6; background:#fdf6f6; border-radius:9px;
+      color:var(--red); font-size:12.5px;
+    }
+    .retry-btn { padding:4px 10px; border:1px solid #e3c5c5; border-radius:7px; background:#fff; color:#a54141; font-size:11.5px; cursor:pointer; }
+    .retry-btn:hover { background:#fdf3f3; }
+
+    /* ---------- modal ---------- */
+    .modal { position:fixed; inset:0; z-index:60; display:none; place-items:center; padding:24px; background:rgba(15,26,34,.42); backdrop-filter:blur(2px); }
+    .modal.open { display:grid; }
+    .modal-card {
+      width:min(600px,100%); max-height:calc(100dvh - 48px); overflow-y:auto;
+      padding:22px 22px 18px; border-radius:16px; background:#fff; box-shadow:var(--shadow-lg);
+      animation:modal-in .18s ease both;
+    }
+    @keyframes modal-in { from { opacity:0; transform:translateY(8px) scale(.99); } to { opacity:1; transform:none; } }
+    .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px; }
+    .modal-head h2 { margin:0; font-size:17px; font-weight:650; }
+    .modal-head p { margin:5px 0 0; font-size:12.5px; color:var(--muted); line-height:1.6; }
+    .entry-form { display:flex; flex-direction:column; gap:11px; }
+    .entry-form textarea { font-family:var(--mono); font-size:12.5px; }
+    .entry-form #newEntryText { min-height:120px; }
+    .entry-form #newEntrySteps { min-height:74px; }
+    .check { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-2); cursor:pointer; }
+    .check input { width:15px; height:15px; accent-color:var(--accent); }
+    .form-message { margin:0; min-height:18px; font-size:12px; color:var(--muted); }
+    .form-message.err { color:var(--red); }
+    .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:2px; }
+
+    /* ---------- toast ---------- */
+    .toast {
+      position:fixed; left:50%; bottom:28px; z-index:80; transform:translateX(-50%);
+      max-width:min(560px,90vw); padding:10px 16px; border-radius:10px;
+      background:#1f3340; color:#fff; font-size:12.5px; line-height:1.55;
+      box-shadow:0 14px 34px -14px rgba(10,26,38,.6); animation:toast-in .18s ease both;
+    }
+    .toast.err { background:#8f3737; }
+    .toast.ok { background:#1d6b54; }
+    @keyframes toast-in { from { opacity:0; transform:translate(-50%,6px); } to { opacity:1; transform:translate(-50%,0); } }
+
+    /* ---------- responsive ---------- */
+    @media (max-width:1100px) {
+      .panes { grid-template-columns:280px minmax(0,1fr); }
+      .shell { padding:12px 16px 16px; }
+    }
+    @media (max-width:900px) {
+      .top { padding:10px 14px; gap:10px; }
+      .brand-text p { display:none; }
+      .top-right { gap:8px; }
+      .shell { height:calc(100dvh - 65px); padding:10px 12px 14px; gap:10px; }
+      .panes { grid-template-columns:minmax(0,1fr); }
+      .library-pane { display:none; }
+      .mobile-doc-select { display:block; }
+      .search-box { flex-basis:100%; max-width:none; }
+      .toolbar-actions { margin-left:0; }
+      .toolbar-actions .btn { flex:1; }
+      .entries { padding:12px 12px 18px; }
+      .entry-meta { max-width:100%; }
+    }
+    @media (max-width:560px) {
+      .top { min-height:56px; padding:8px 12px; }
+      .brand-mark { width:32px; height:32px; }
+      .brand-text h1 { font-size:14px; }
+      .stats { gap:5px; }
+      .stat { padding:3px 7px; font-size:10px; gap:4px; }
+      .stat b { font-size:10.5px; }
+      .top-right { gap:6px; }
+      .top-right .btn { padding:5px 8px; font-size:11px; }
+      .top-right .btn svg { display:none; }
+      .shell { height:calc(100dvh - 57px); padding:8px 10px 12px; }
+      .pane-head { padding:9px 12px; }
+      .entries-head { align-items:center; flex-wrap:wrap; }
+      .entries-head .pane-sub { display:none; }
+      .entries-head-actions { display:none; }
+      .mobile-doc-select { max-width:52%; margin-left:auto; min-width:140px; }
+      .entry-card { padding:10px 11px; }
+      .entry-title { min-width:120px; }
+      .move-fields { grid-template-columns:1fr; }
+      .entry-actions { gap:6px; }
+      .entry-actions .btn { padding:5px 9px; font-size:11.5px; }
+      .modal { padding:12px; }
+      .modal-card { padding:18px 16px 14px; border-radius:14px; max-height:calc(100dvh - 24px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation:none !important; transition:none !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5c0-1.1.9-2 2-2h5l2 2h5a2 2 0 012 2V18a2 2 0 01-2 2H6a2 2 0 01-2-2z"></path><path d="M8 11h8M8 15h5"></path></svg>
+      </span>
+      <span class="brand-text">
+        <h1>RAG 知识库管理</h1>
+        <p>按文档管理知识条 · 保存后自动重建索引</p>
+      </span>
+    </div>
+    <div class="top-right">
+      <div id="libraryStats" class="stats" aria-live="polite">
+        <span class="stat"><b>–</b>文档</span>
+        <span class="stat"><b>–</b>知识条</span>
+        <span class="stat"><b>–</b>已启用</span>
+      </div>
+      <a class="btn btn-ghost" href="/backend">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14l-4-4 4-4M5 10h9a5 5 0 010 10h-2"></path></svg>
+        返回后台
+      </a>
+      <button id="logout" class="btn btn-ghost" type="button">退出登录</button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <div class="toolbar">
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4 4"></path></svg>
+        <label class="sr-only" for="search">搜索知识条</label>
+        <input id="search" type="search" placeholder="搜索知识条标题或内容…" autocomplete="off">
+      </div>
+      <div class="toolbar-actions">
+        <input id="file" type="file" accept=".pdf,.docx,.md,.txt" class="sr-only" tabindex="-1">
+        <button id="upload" class="btn btn-ghost" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V5M7.5 9.5L12 5l4.5 4.5"></path><path d="M5 15v3a2 2 0 002 2h10a2 2 0 002-2v-3"></path></svg>
+          上传文件
+        </button>
+        <button id="rebuild" class="btn btn-ghost" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg>
+          重建索引
+        </button>
+        <button id="newEntry" class="btn btn-dark" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          新建知识条
+        </button>
+      </div>
+    </div>
+    <div id="toolbarMsg" class="toolbar-msg" role="status" hidden></div>
+
+    <main class="panes">
+      <aside class="pane library-pane" aria-label="文档列表">
+        <div class="pane-head">
+          <span class="pane-title">文档</span>
+          <span id="docCount" class="pane-count"></span>
+        </div>
+        <div id="docList" class="doc-list" aria-busy="true"></div>
+      </aside>
+      <section class="pane" aria-label="知识条">
+        <div class="pane-head entries-head">
+          <div>
+            <div id="entriesTitle" class="pane-title">知识条</div>
+            <div id="entriesSubtitle" class="pane-sub">选择左侧文档查看并按条编辑</div>
+          </div>
+          <div class="mobile-doc-select">
+            <label class="sr-only" for="docSelect">选择文档</label>
+            <select id="docSelect"></select>
+          </div>
+          <div class="entries-head-actions">
+            <button id="newEntryInline" class="btn btn-ghost btn-sm" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+              新建
+            </button>
+          </div>
+        </div>
+        <div id="entries" class="entries" aria-busy="true"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="entryModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="entryModalTitle" aria-hidden="true">
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <div>
+          <h2 id="entryModalTitle">新建知识条</h2>
+          <p>保存后会立即重建 RAG 索引，并可用于对话检索。</p>
+        </div>
+        <button id="entryClose" class="icon-btn" type="button" aria-label="关闭新建知识条">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+      </div>
+      <form id="entryForm" class="entry-form" novalidate>
+        <label class="field">
+          <span>文档</span>
+          <select id="newEntryDocument"></select>
+        </label>
+        <label class="field" id="newDocField">
+          <span>新文档名</span>
+          <input id="newEntryDocumentName" type="text" placeholder="例如：网络故障速查手册" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>标题</span>
+          <input id="newEntryTitle" type="text" placeholder="知识条标题" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span>内容</span>
+          <textarea id="newEntryText" rows="5" placeholder="知识条正文，用于向量检索与展示" required></textarea>
+        </label>
+        <label class="field">
+          <span>步骤（每行一步）</span>
+          <textarea id="newEntrySteps" rows="3" placeholder="1. 确认网络连通性&#10;2. 重启 VPN 客户端"></textarea>
+        </label>
+        <label class="check"><input id="newEntryEnabled" type="checkbox" checked>启用该知识条</label>
+        <p id="entryMessage" class="form-message" role="status"></p>
+        <div class="modal-actions">
+          <button id="entryCancel" class="btn btn-ghost" type="button">取消</button>
+          <button id="entrySubmit" class="btn btn-dark" type="submit">创建知识条</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      /* ---------- helpers ---------- */
+      const $ = (id) => document.getElementById(id);
+      const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+      const KIND_ORDER = ["知识库 KB", "历史工单", "导入文件", "手工", "其他"];
+      const KIND_ALIASES = {
+        knowledge: "知识库 KB", kb: "知识库 KB", knowledge_base: "知识库 KB", 知识库: "知识库 KB", kb_doc: "知识库 KB",
+        ticket: "历史工单", tickets: "历史工单", history: "历史工单", historical: "历史工单", 工单: "历史工单",
+        import: "导入文件", imported: "导入文件", file: "导入文件", files: "导入文件", upload: "导入文件", 导入: "导入文件",
+        manual: "手工", custom: "手工", user: "手工", 手工: "手工"
+      };
+      const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"></path></svg>';
+      const ICON_LIBRARY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5c0-1.1.9-2 2-2h5l2 2h5a2 2 0 012 2V18a2 2 0 01-2 2H6a2 2 0 01-2-2z"></path><path d="M8 11h8M8 15h5"></path></svg>';
+
+      /* ---------- state ---------- */
+      const state = {
+        library: [], stats: { documents: 0, entries: 0, enabled: 0 },
+        selected: "", search: "", entries: [],
+        libraryLoading: false, entriesLoading: false,
+        entriesSeq: 0, redirecting: false,
+        submittingEntry: false
+      };
+      let toastTimer = null;
+      let searchTimer = null;
+
+      /* ---------- api ---------- */
+      function redirectToLogin() {
+        if (state.redirecting) return;
+        state.redirecting = true;
+        location.replace("/login?next=/rag");
+      }
+      async function apiJson(url, options = {}, timeoutMs = 60000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(url, { credentials: "same-origin", ...options, signal: controller.signal });
+          let data = null;
+          const raw = await response.text();
+          if (raw) {
+            try { data = JSON.parse(raw); } catch (error) { data = null; }
+          }
+          if (response.status === 401) {
+            redirectToLogin();
+            throw new Error((data && data.error) || "登录已过期，请重新登录");
+          }
+          if (!response.ok) {
+            let message = (data && (data.error || data.message)) || `请求失败（HTTP ${response.status}）`;
+            if (data && data.detail && typeof data.detail === "string") message = data.detail;
+            const requestError = new Error(message);
+            requestError.status = response.status;
+            throw requestError;
+          }
+          return data;
+        } catch (error) {
+          if (error && error.name === "AbortError") throw new Error("请求超时，请稍后重试");
+          throw error;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      function runSafely(fn) {
+        return (...args) => {
+          try {
+            const result = fn(...args);
+            if (result && typeof result.catch === "function") result.catch((error) => console.error(error));
+          } catch (error) {
+            console.error(error);
+          }
+        };
+      }
+
+      /* ---------- toast / messages ---------- */
+      function showToast(text, type) {
+        const el = $("toast");
+        if (!el) return;
+        el.textContent = String(text || "");
+        el.className = type ? `toast ${type}` : "toast";
+        el.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { el.hidden = true; }, 4200);
+      }
+      function showToolbarMessage(text, isError) {
+        const el = $("toolbarMsg");
+        el.textContent = String(text || "");
+        el.className = isError ? "toolbar-msg" : "toolbar-msg ok";
+        el.hidden = !text;
+      }
+
+      /* ---------- text helpers ---------- */
+      function fmtNumber(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : 0;
+      }
+      function formatTime(value) {
+        if (!value) return "";
+        const raw = String(value);
+        const date = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
+        if (Number.isNaN(date.getTime())) return raw.slice(0, 16);
+        const pad = (n) => String(n).padStart(2, "0");
+        const now = new Date();
+        const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        if (date.toDateString() === now.toDateString()) return `今天 ${time}`;
+        return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${time}`;
+      }
+      function kindLabel(kind) {
+        const key = String(kind || "").trim().toLowerCase();
+        return KIND_ALIASES[key] || "其他";
+      }
+      function splitSteps(value) {
+        return String(value || "").split("\n").map((line) => line.trim()).filter(Boolean);
+      }
+      function stepsToText(steps) {
+        return Array.isArray(steps) ? steps.join("\n") : String(steps || "");
+      }
+      function groupDocuments(documents) {
+        const groups = new Map();
+        documents.forEach((doc) => {
+          const label = kindLabel(doc.kind);
+          if (!groups.has(label)) groups.set(label, []);
+          groups.get(label).push(doc);
+        });
+        return Array.from(groups.entries()).sort((a, b) => KIND_ORDER.indexOf(a[0]) - KIND_ORDER.indexOf(b[0]));
+      }
+      function autoGrow(textarea) {
+        if (!textarea) return;
+        textarea.style.height = "auto";
+        const max = textarea.classList.contains("entry-text") ? 420 : 260;
+        textarea.style.height = `${Math.min(textarea.scrollHeight, max)}px`;
+      }
+
+      /* ---------- stats / library ---------- */
+      function renderStats() {
+        const stats = state.stats || {};
+        $("libraryStats").innerHTML =
+          `<span class="stat"><b>${fmtNumber(stats.documents)}</b>文档</span>`
+          + `<span class="stat"><b>${fmtNumber(stats.entries)}</b>知识条</span>`
+          + `<span class="stat"><b>${fmtNumber(stats.enabled)}</b>已启用</span>`;
+        $("docCount").textContent = state.library.length ? `${state.library.length} 个文档` : "";
+      }
+      async function loadLibrary(options = {}) {
+        state.libraryLoading = true;
+        if (!options.silent) renderDocSkeleton();
+        try {
+          const data = await apiJson("/api/rag/library");
+          const documents = data && Array.isArray(data.documents) ? data.documents : [];
+          state.library = documents;
+          state.stats = data && data.stats ? data.stats : {
+            documents: documents.length,
+            entries: documents.reduce((total, doc) => total + fmtNumber(doc.entry_count), 0),
+            enabled: documents.reduce((total, doc) => total + fmtNumber(doc.enabled_count), 0)
+          };
+          if (!state.selected || !documents.some((doc) => String(doc.name) === state.selected)) {
+            const firstGroup = groupDocuments(documents)[0];
+            state.selected = firstGroup && firstGroup[1].length ? String(firstGroup[1][0].name) : "";
+          }
+          renderStats();
+          renderDocList();
+          syncDocSelect();
+          return true;
+        } catch (error) {
+          state.library = [];
+          state.stats = { documents: 0, entries: 0, enabled: 0 };
+          renderStats();
+          renderLibraryError(error.message);
+          return false;
+        } finally {
+          state.libraryLoading = false;
+        }
+      }
+      function renderDocSkeleton() {
+        $("docList").setAttribute("aria-busy", "true");
+        $("docList").innerHTML = Array.from({ length: 6 }, () => '<div class="skeleton skeleton-row"></div>').join("");
+      }
+      function renderLibraryError(message) {
+        $("docList").setAttribute("aria-busy", "false");
+        $("docList").innerHTML = `<div class="inline-error">文档列表加载失败：${esc(message)}<button type="button" class="retry-btn" data-retry="library">重试</button></div>`;
+        $("entries").setAttribute("aria-busy", "false");
+        $("entries").innerHTML = `<div class="inline-error">无法加载知识条：${esc(message)}<button type="button" class="retry-btn" data-retry="bootstrap">重试</button></div>`;
+      }
+      function renderDocList() {
+        const box = $("docList");
+        box.setAttribute("aria-busy", "false");
+        if (!state.library.length) {
+          box.innerHTML = `<div class="empty"><div class="empty-icon">${ICON_LIBRARY}</div><strong>暂无文档</strong><span>上传文件或新建知识条后，文档会出现在这里。</span><div class="empty-actions"><button type="button" class="btn btn-ghost btn-sm" data-action="upload">上传文件</button><button type="button" class="btn btn-dark btn-sm" data-action="new-entry">新建知识条</button></div></div>`;
+          bindEmptyActions(box);
+          return;
+        }
+        const searchActive = Boolean(state.search);
+        box.innerHTML = groupDocuments(state.library).map(([label, documents]) =>
+          `<div class="doc-group"><div class="group-label">${esc(label)}<span class="group-count">${documents.length}</span></div>`
+          + documents.map((doc) => {
+            const name = String(doc.name || "");
+            const title = String(doc.title || doc.name || "未命名文档");
+            const count = fmtNumber(doc.entry_count);
+            const enabled = fmtNumber(doc.enabled_count);
+            const active = !searchActive && name === state.selected;
+            return `<div class="doc-item${active ? " active" : ""}" data-document="${esc(name)}" role="button" tabindex="0" aria-pressed="${active ? "true" : "false"}">`
+              + `<div class="doc-main"><span class="doc-title" title="${esc(title)}">${esc(title)}</span>`
+              + `<span class="doc-meta">${count} 条 · ${enabled} 启用${doc.updated_at ? ` · ${esc(formatTime(doc.updated_at))}` : ""}</span></div>`
+              + `<button type="button" class="doc-delete" data-delete-doc="${esc(name)}" title="删除文档" aria-label="删除文档：${esc(title)}">${TRASH_ICON}</button>`
+              + "</div>";
+          }).join("")
+          + "</div>"
+        ).join("");
+        box.querySelectorAll(".doc-item").forEach((item) => {
+          item.addEventListener("click", (event) => {
+            if (event.target.closest("[data-delete-doc]")) return;
+            selectDocument(item.dataset.document);
+          });
+          item.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              selectDocument(item.dataset.document);
+            }
+          });
+        });
+        box.querySelectorAll("[data-delete-doc]").forEach((button) => {
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            deleteDocument(button.dataset.deleteDoc);
+          });
+        });
+        const activeItem = box.querySelector(".doc-item.active");
+        if (activeItem && !state.search) {
+          const itemRect = activeItem.getBoundingClientRect();
+          const boxRect = box.getBoundingClientRect();
+          if (itemRect.top < boxRect.top || itemRect.bottom > boxRect.bottom) {
+            activeItem.scrollIntoView({ block: "nearest" });
+          }
+        }
+      }
+      function selectDocument(name) {
+        if (!name) return;
+        state.selected = String(name);
+        state.search = "";
+        $("search").value = "";
+        $("docSelect").value = state.selected;
+        state.library.forEach(() => {});
+        markActiveDocument();
+        loadEntries(state.selected);
+      }
+      function markActiveDocument() {
+        document.querySelectorAll(".doc-item").forEach((item) => {
+          const active = !state.search && item.dataset.document === state.selected;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-pressed", active ? "true" : "false");
+        });
+        const select = $("docSelect");
+        if (select && state.selected) select.value = state.selected;
+      }
+      function syncDocSelect() {
+        const select = $("docSelect");
+        select.innerHTML = state.library.length
+          ? state.library.map((doc) => `<option value="${esc(String(doc.name || ""))}">${esc(String(doc.title || doc.name || "未命名文档"))}</option>`).join("")
+          : '<option value="">暂无文档</option>';
+        if (state.selected && state.library.some((doc) => String(doc.name) === state.selected)) select.value = state.selected;
+      }
+
+      /* ---------- entries ---------- */
+      function renderEntriesSkeleton() {
+        $("entries").setAttribute("aria-busy", "true");
+        $("entries").innerHTML = `${'<div class="skeleton skeleton-card"></div>'.repeat(3)}<span class="sr-only">加载中</span>`;
+      }
+      function renderEntriesError(message, retry) {
+        $("entries").setAttribute("aria-busy", "false");
+        $("entries").innerHTML = `<div class="inline-error">知识条加载失败：${esc(message)}<button type="button" class="retry-btn" data-retry-entry>重试</button></div>`;
+        const button = $("entries").querySelector("[data-retry-entry]");
+        if (button) button.addEventListener("click", retry);
+      }
+      async function loadEntries(document) {
+        if (!document) {
+          state.entries = [];
+          renderEntries({ mode: "none" });
+          return;
+        }
+        const seq = ++state.entriesSeq;
+        state.entriesLoading = true;
+        renderEntriesSkeleton();
+        try {
+          const data = await apiJson(`/api/rag/entries?document=${encodeURIComponent(document)}`);
+          if (seq !== state.entriesSeq) return;
+          state.entries = data && Array.isArray(data.entries) ? data.entries : [];
+          renderEntries({ mode: "document", document });
+        } catch (error) {
+          if (seq !== state.entriesSeq) return;
+          renderEntriesError(error.message, () => loadEntries(document));
+        } finally {
+          if (seq === state.entriesSeq) state.entriesLoading = false;
+        }
+      }
+      async function runSearch(query) {
+        const q = String(query || "").trim();
+        state.search = q;
+        if (!q) { loadEntries(state.selected); return; }
+        const seq = ++state.entriesSeq;
+        state.entriesLoading = true;
+        renderEntriesSkeleton();
+        try {
+          const data = await apiJson(`/api/rag/entries?q=${encodeURIComponent(q)}`);
+          if (seq !== state.entriesSeq) return;
+          state.entries = data && Array.isArray(data.entries) ? data.entries : [];
+          markActiveDocument();
+          renderEntries({ mode: "search", query: q });
+        } catch (error) {
+          if (seq !== state.entriesSeq) return;
+          renderEntriesError(error.message, () => runSearch(q));
+        } finally {
+          if (seq === state.entriesSeq) state.entriesLoading = false;
+        }
+      }
+      function documentTitle(name) {
+        const doc = state.library.find((item) => String(item.name) === String(name));
+        return doc ? String(doc.title || doc.name) : String(name || "");
+      }
+      function docOptions(exceptDocument) {
+        const options = state.library
+          .filter((doc) => String(doc.name) !== String(exceptDocument))
+          .map((doc) => `<option value="${esc(String(doc.name || ""))}">${esc(String(doc.title || doc.name || "未命名文档"))}</option>`);
+        return ['<option value="">选择目标文档…</option>', ...options].join("");
+      }
+      function renderEntries(options) {
+        const box = $("entries");
+        box.setAttribute("aria-busy", "false");
+        const titleEl = $("entriesTitle");
+        const subEl = $("entriesSubtitle");
+        if (options.mode === "search") {
+          titleEl.textContent = "搜索结果";
+          subEl.textContent = `“${options.query}” · ${state.entries.length} 条匹配`;
+        } else if (options.mode === "document") {
+          const doc = state.library.find((item) => String(item.name) === String(options.document));
+          titleEl.textContent = doc ? String(doc.title || doc.name) : documentTitle(options.document);
+          subEl.textContent = doc ? `${kindLabel(doc.kind)} · ${state.entries.length} 条知识 · 保存后自动重建索引` : "按文档查看并编辑知识条";
+        } else {
+          titleEl.textContent = "知识条";
+          subEl.textContent = "选择文档后查看并按条编辑";
+        }
+        if (!state.entries.length) {
+          if (options.mode === "search") {
+            box.innerHTML = `<div class="empty"><div class="empty-icon">${ICON_LIBRARY}</div><strong>没有匹配的知识条</strong><span>换个关键词试试，或清除搜索查看当前文档。</span><div class="empty-actions"><button type="button" class="btn btn-ghost btn-sm" data-action="clear-search">清除搜索</button></div></div>`;
+          } else if (options.mode === "none") {
+            box.innerHTML = `<div class="empty"><div class="empty-icon">${ICON_LIBRARY}</div><strong>暂无文档</strong><span>上传文件或新建知识条后，这里会按文档展示知识条。</span><div class="empty-actions"><button type="button" class="btn btn-ghost btn-sm" data-action="upload">上传文件</button><button type="button" class="btn btn-dark btn-sm" data-action="new-entry">新建知识条</button></div></div>`;
+          } else {
+            box.innerHTML = `<div class="empty"><div class="empty-icon">${ICON_LIBRARY}</div><strong>该文档还没有知识条</strong><span>可以新建知识条，或从其他文档移动过来。</span><div class="empty-actions"><button type="button" class="btn btn-dark btn-sm" data-action="new-entry">新建知识条</button></div></div>`;
+          }
+          bindEmptyActions(box);
+          return;
+        }
+        box.innerHTML = state.entries.map((entry) => entryCardHtml(entry, options.mode === "search")).join("");
+        box.querySelectorAll("textarea").forEach(autoGrow);
+        box.querySelectorAll(".entry-card").forEach(bindEntryCard);
+      }
+      function entryCardHtml(entry, showDocument) {
+        const id = String(entry.id);
+        const enabled = Boolean(entry.enabled);
+        const title = String(entry.title || "");
+        return `<article class="entry-card" data-entry-id="${esc(id)}">`
+          + `<div class="entry-head"><input class="entry-title" data-field="title" type="text" value="${esc(title)}" placeholder="知识条标题" aria-label="知识条标题">`
+          + (showDocument ? `<span class="entry-doc" title="所属文档">${esc(documentTitle(entry.document))}</span>` : "")
+          + `<label class="switch" title="启用 / 停用该知识条"><input type="checkbox" data-enabled ${enabled ? "checked" : ""} aria-label="启用知识条"><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span><span class="switch-text">启用</span></label>`
+          + "</div>"
+          + `<div class="entry-body"><label class="field"><span>内容</span><textarea class="entry-text" data-field="text" rows="3">${esc(entry.text || "")}</textarea></label>`
+          + `<label class="field"><span>步骤（每行一步）</span><textarea class="entry-steps" data-field="steps" rows="2">${esc(stepsToText(entry.steps))}</textarea></label></div>`
+          + `<div class="entry-foot"><span class="entry-meta">${esc(id)}${entry.updated_at ? ` · ${esc(formatTime(entry.updated_at))}` : ""}</span>`
+          + `<div class="entry-actions"><button type="button" class="btn btn-ghost btn-sm" data-move>移动</button>`
+          + `<button type="button" class="btn btn-danger-ghost btn-sm" data-delete>删除</button>`
+          + `<button type="button" class="btn btn-dark btn-sm" data-save>保存</button></div></div>`
+          + `<div class="move-panel" hidden><div class="move-fields"><label class="field"><span>移动到已有文档</span><select class="move-select">${docOptions(entry.document)}</select></label>`
+          + `<label class="field"><span>或输入新文档名</span><input class="move-new" type="text" placeholder="新建文档名称（可选）" autocomplete="off"></label></div>`
+          + `<p class="move-msg"></p><div class="move-actions"><button type="button" class="btn btn-ghost btn-sm" data-move-cancel>取消</button><button type="button" class="btn btn-dark btn-sm" data-move-confirm>确认移动</button></div></div>`
+          + "</article>";
+      }
+      function bindEntryCard(card) {
+        const titleInput = card.querySelector(".entry-title");
+        const textInput = card.querySelector(".entry-text");
+        const stepsInput = card.querySelector(".entry-steps");
+        const enabledInput = card.querySelector("[data-enabled]");
+        const markDirty = () => card.classList.add("dirty");
+        [titleInput, textInput, stepsInput].forEach((input) => {
+          if (!input) return;
+          input.addEventListener("input", () => { markDirty(); autoGrow(input); });
+        });
+        if (enabledInput) enabledInput.addEventListener("change", markDirty);
+        card.querySelector("[data-save]").addEventListener("click", () => saveEntry(card));
+        card.querySelector("[data-delete]").addEventListener("click", () => deleteEntry(card));
+        card.querySelector("[data-move]").addEventListener("click", () => toggleMovePanel(card));
+        card.querySelector("[data-move-cancel]").addEventListener("click", () => { card.querySelector(".move-panel").hidden = true; });
+        card.querySelector("[data-move-confirm]").addEventListener("click", () => confirmMove(card));
+        const moveSelect = card.querySelector(".move-select");
+        const moveNew = card.querySelector(".move-new");
+        if (moveSelect) moveSelect.addEventListener("change", () => { if (moveSelect.value) moveNew.value = ""; });
+        if (moveNew) moveNew.addEventListener("input", () => { if (moveNew.value.trim()) moveSelect.value = ""; });
+      }
+      function bindEmptyActions(container) {
+        container.querySelectorAll("[data-action]").forEach((button) => {
+          button.addEventListener("click", () => {
+            if (button.dataset.action === "upload") $("upload").click();
+            else if (button.dataset.action === "new-entry") openEntryModal();
+            else if (button.dataset.action === "clear-search") {
+              $("search").value = "";
+              state.search = "";
+              markActiveDocument();
+              loadEntries(state.selected);
+            }
+          });
+        });
+      }
+      function highlightEntry(entryId) {
+        if (!entryId) return;
+        const card = document.querySelector(`.entry-card[data-entry-id="${CSS.escape(String(entryId))}"]`);
+        if (!card) return;
+        card.classList.add("highlight");
+        card.scrollIntoView({ block: "center", behavior: "smooth" });
+        setTimeout(() => card.classList.remove("highlight"), 1800);
+      }
+      function setButtonLoading(button, label) {
+        if (!button) return;
+        if (button.dataset.originalLabel == null) button.dataset.originalLabel = button.textContent.trim();
+        button.disabled = true;
+        button.textContent = label;
+      }
+      function restoreButton(button, fallbackLabel) {
+        if (!button) return;
+        button.disabled = false;
+        button.textContent = button.dataset.originalLabel || fallbackLabel || "";
+        delete button.dataset.originalLabel;
+      }
+
+      /* ---------- mutations ---------- */
+      async function refreshAfterMutation(preferredDocument, focusEntryId) {
+        await loadLibrary({ silent: true });
+        if (preferredDocument && state.library.some((doc) => String(doc.name) === String(preferredDocument))) {
+          state.selected = String(preferredDocument);
+          syncDocSelect();
+          markActiveDocument();
+        }
+        if (state.search) await runSearch(state.search);
+        else await loadEntries(state.selected);
+        if (focusEntryId) setTimeout(() => highlightEntry(focusEntryId), 60);
+      }
+      async function saveEntry(card) {
+        const id = card.dataset.entryId;
+        const title = card.querySelector(".entry-title").value.trim();
+        const text = card.querySelector(".entry-text").value;
+        const steps = splitSteps(card.querySelector(".entry-steps").value);
+        const enabled = card.querySelector("[data-enabled]").checked;
+        if (!title) { showToast("标题不能为空", "err"); card.querySelector(".entry-title").focus(); return; }
+        if (!text.trim()) { showToast("内容不能为空", "err"); card.querySelector(".entry-text").focus(); return; }
+        const button = card.querySelector("[data-save]");
+        setButtonLoading(button, "保存中…");
+        try {
+          await apiJson("/api/rag/entries/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, title, text, steps, enabled })
+          }, 120000);
+          showToast("已保存并重建索引", "ok");
+          await refreshAfterMutation(state.search ? "" : state.selected, id);
+        } catch (error) {
+          showToast(`保存失败：${error.message}`, "err");
+        } finally {
+          restoreButton(button, "保存");
+        }
+      }
+      async function deleteEntry(card) {
+        const id = card.dataset.entryId;
+        const title = card.querySelector(".entry-title").value.trim() || "该知识条";
+        if (!window.confirm(`删除知识条「${title}」？此操作会立即重建索引。`)) return;
+        const button = card.querySelector("[data-delete]");
+        setButtonLoading(button, "删除中…");
+        try {
+          await apiJson("/api/rag/entries/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id })
+          }, 120000);
+          showToast("已删除并重建索引", "ok");
+          await refreshAfterMutation(state.search ? "" : state.selected);
+        } catch (error) {
+          showToast(`删除失败：${error.message}`, "err");
+          restoreButton(button, "删除");
+        }
+      }
+      function toggleMovePanel(card) {
+        const panel = card.querySelector(".move-panel");
+        panel.hidden = !panel.hidden;
+        if (!panel.hidden) {
+          const select = panel.querySelector(".move-select");
+          const first = select.querySelector('option[value=""]');
+          if (first) first.selected = true;
+          panel.querySelector(".move-new").value = "";
+          panel.querySelector(".move-msg").textContent = "";
+          panel.querySelector(".move-new").focus();
+        }
+      }
+      async function confirmMove(card) {
+        const id = card.dataset.entryId;
+        const select = card.querySelector(".move-select");
+        const newDocInput = card.querySelector(".move-new");
+        const message = card.querySelector(".move-msg");
+        const target = newDocInput.value.trim() || select.value;
+        if (!target) {
+          message.textContent = "请选择目标文档或输入新文档名";
+          message.className = "move-msg err";
+          return;
+        }
+        const currentDocument = card.querySelector(".entry-doc") ? card.querySelector(".entry-doc").getAttribute("title") : "";
+        if (currentDocument && target === currentDocument) {
+          message.textContent = "目标文档与当前文档相同";
+          message.className = "move-msg err";
+          return;
+        }
+        const button = card.querySelector("[data-move-confirm]");
+        setButtonLoading(button, "移动中…");
+        try {
+          await apiJson("/api/rag/entries/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, target_document: target })
+          }, 120000);
+          showToast(`已移动到「${target}」并重建索引`, "ok");
+          state.search = "";
+          $("search").value = "";
+          await loadLibrary({ silent: true });
+          if (state.library.some((doc) => String(doc.name) === target)) {
+            state.selected = target;
+            syncDocSelect();
+            markActiveDocument();
+            await loadEntries(target);
+            setTimeout(() => highlightEntry(id), 80);
+          } else {
+            await loadEntries(state.selected);
+          }
+        } catch (error) {
+          message.textContent = `移动失败：${error.message}`;
+          message.className = "move-msg err";
+        } finally {
+          restoreButton(button, "确认移动");
+        }
+      }
+      async function deleteDocument(name) {
+        if (!name) return;
+        const title = documentTitle(name);
+        if (!window.confirm(`删除文档「${title}」及其全部知识条？此操作会立即重建索引。`)) return;
+        try {
+          await apiJson("/api/rag/documents/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ document: name })
+          }, 180000);
+          showToast("文档已删除并重建索引", "ok");
+          state.search = "";
+          $("search").value = "";
+          if (state.selected === name) state.selected = "";
+          const ok = await loadLibrary({ silent: true });
+          if (!ok) return;
+          if (!state.selected && state.library.length) state.selected = String(state.library[0].name);
+          syncDocSelect();
+          markActiveDocument();
+          if (state.selected) await loadEntries(state.selected);
+          else renderEntries({ mode: "none" });
+        } catch (error) {
+          showToast(`删除文档失败：${error.message}`, "err");
+        }
+      }
+
+      /* ---------- new entry modal ---------- */
+      function fillDocumentSelect(select, preselect) {
+        const options = state.library.map((doc) => `<option value="${esc(String(doc.name || ""))}">${esc(String(doc.title || doc.name || "未命名文档"))}</option>`);
+        options.push('<option value="__new__">＋ 新建文档…</option>');
+        select.innerHTML = options.join("");
+        if (preselect && state.library.some((doc) => String(doc.name) === preselect)) select.value = preselect;
+        else if (state.library.length) select.value = String(state.library[0].name);
+        else select.value = "__new__";
+      }
+      function syncNewDocField() {
+        const isNew = $("newEntryDocument").value === "__new__";
+        $("newDocField").hidden = !isNew;
+        if (isNew) $("newEntryDocumentName").focus();
+      }
+      function openEntryModal() {
+        fillDocumentSelect($("newEntryDocument"), state.selected);
+        $("newEntryTitle").value = "";
+        $("newEntryText").value = "";
+        $("newEntrySteps").value = "";
+        $("newEntryEnabled").checked = true;
+        $("entryMessage").textContent = "";
+        $("entryMessage").className = "form-message";
+        $("newEntryDocumentName").value = "";
+        $("entryModal").classList.add("open");
+        $("entryModal").setAttribute("aria-hidden", "false");
+        syncNewDocField();
+        setTimeout(() => $("newEntryTitle").focus(), 40);
+      }
+      function closeEntryModal() {
+        $("entryModal").classList.remove("open");
+        $("entryModal").setAttribute("aria-hidden", "true");
+        $("newEntry").focus();
+      }
+      async function submitNewEntry(event) {
+        if (event) event.preventDefault();
+        if (state.submittingEntry) return;
+        const documentSelect = $("newEntryDocument");
+        const isNewDocument = documentSelect.value === "__new__";
+        const documentName = isNewDocument ? $("newEntryDocumentName").value.trim() : documentSelect.value;
+        const title = $("newEntryTitle").value.trim();
+        const text = $("newEntryText").value;
+        const steps = splitSteps($("newEntrySteps").value);
+        const enabled = $("newEntryEnabled").checked;
+        const message = $("entryMessage");
+        if (!documentName) { message.textContent = "请填写新文档名"; message.className = "form-message err"; $("newEntryDocumentName").focus(); return; }
+        if (!title) { message.textContent = "请填写标题"; message.className = "form-message err"; $("newEntryTitle").focus(); return; }
+        if (!text.trim()) { message.textContent = "请填写内容"; message.className = "form-message err"; $("newEntryText").focus(); return; }
+        state.submittingEntry = true;
+        const button = $("entrySubmit");
+        button.disabled = true;
+        button.textContent = "创建中…";
+        message.textContent = "正在创建知识条并重建索引…";
+        message.className = "form-message";
+        try {
+          const data = await apiJson("/api/rag/entries/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ document: documentName, title, text, steps, enabled })
+          }, 180000);
+          const created = data && data.entry ? data.entry : null;
+          const createdId = created && created.id != null ? String(created.id) : "";
+          showToast("已创建知识条并重建索引", "ok");
+          closeEntryModal();
+          state.search = "";
+          $("search").value = "";
+          await loadLibrary({ silent: true });
+          if (state.library.some((doc) => String(doc.name) === documentName)) state.selected = documentName;
+          syncDocSelect();
+          markActiveDocument();
+          await loadEntries(state.selected);
+          if (createdId) setTimeout(() => highlightEntry(createdId), 80);
+        } catch (error) {
+          message.textContent = `创建失败：${error.message}`;
+          message.className = "form-message err";
+        } finally {
+          state.submittingEntry = false;
+          button.disabled = false;
+          button.textContent = "创建知识条";
+        }
+      }
+
+      /* ---------- upload / rebuild ---------- */
+      function readFileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = String(reader.result || "");
+            const comma = result.indexOf(",");
+            resolve(comma >= 0 ? result.slice(comma + 1) : "");
+          };
+          reader.onerror = () => reject(new Error("文件读取失败"));
+          reader.readAsDataURL(file);
+        });
+      }
+      async function handleFileSelected() {
+        const input = $("file");
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const suffix = String(file.name.split(".").pop() || "").toLowerCase();
+        if (!["pdf", "docx", "md", "txt"].includes(suffix)) {
+          showToolbarMessage("仅支持 PDF、DOCX、Markdown、TXT 文件", true);
+          input.value = "";
+          return;
+        }
+        const button = $("upload");
+        showToolbarMessage("", false);
+        setButtonLoading(button, "导入中…");
+        try {
+          const contentBase64 = await readFileAsBase64(file);
+          const data = await apiJson("/api/rag/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: file.name, content_base64: contentBase64 })
+          }, 240000);
+          const chunks = data && data.chunks != null ? data.chunks : (data && data.indexed != null ? data.indexed : null);
+          showToast(chunks != null ? `已导入 ${chunks} 条知识并重建索引` : "文件已导入并重建索引", "ok");
+          showToolbarMessage("", false);
+          state.search = "";
+          $("search").value = "";
+          await loadLibrary({ silent: true });
+          if (data && data.document && state.library.some((doc) => String(doc.name) === String(data.document))) {
+            state.selected = String(data.document);
+          }
+          syncDocSelect();
+          markActiveDocument();
+          await loadEntries(state.selected);
+        } catch (error) {
+          const hint = error.status === 400 ? error.message : `导入失败：${error.message}`;
+          showToolbarMessage(hint, true);
+        } finally {
+          restoreButton(button, "上传文件");
+          input.value = "";
+        }
+      }
+      async function rebuildIndex() {
+        const button = $("rebuild");
+        setButtonLoading(button, "重建中…");
+        showToolbarMessage("", false);
+        try {
+          const data = await apiJson("/api/rag/rebuild", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }, 240000);
+          const count = data && data.count != null ? data.count : (data && data.stats && data.stats.entries != null ? data.stats.entries : null);
+          showToast(count != null ? `索引已更新，共 ${count} 条` : "索引已更新", "ok");
+          await loadLibrary({ silent: true });
+          if (state.search) await runSearch(state.search);
+          else if (state.selected) await loadEntries(state.selected);
+        } catch (error) {
+          showToolbarMessage(`重建失败：${error.message}`, true);
+        } finally {
+          restoreButton(button, "重建索引");
+        }
+      }
+
+      /* ---------- wiring ---------- */
+      $("search").addEventListener("input", () => {
+        clearTimeout(searchTimer);
+        const query = $("search").value.trim();
+        searchTimer = setTimeout(() => {
+          if (!query) {
+            state.search = "";
+            markActiveDocument();
+            loadEntries(state.selected);
+          } else {
+            runSearch(query);
+          }
+        }, 320);
+      });
+      $("search").addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          $("search").value = "";
+          state.search = "";
+          markActiveDocument();
+          loadEntries(state.selected);
+        }
+      });
+      $("docSelect").addEventListener("change", () => { selectDocument($("docSelect").value); });
+      $("upload").addEventListener("click", () => $("file").click());
+      $("file").addEventListener("change", runSafely(handleFileSelected));
+      $("rebuild").addEventListener("click", runSafely(rebuildIndex));
+      $("newEntry").addEventListener("click", openEntryModal);
+      $("newEntryInline").addEventListener("click", openEntryModal);
+      $("entryClose").addEventListener("click", closeEntryModal);
+      $("entryCancel").addEventListener("click", closeEntryModal);
+      $("entryForm").addEventListener("submit", runSafely(submitNewEntry));
+      $("newEntryDocument").addEventListener("change", syncNewDocField);
+      $("entryModal").addEventListener("click", (event) => { if (event.target === $("entryModal")) closeEntryModal(); });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && $("entryModal").classList.contains("open")) {
+          event.preventDefault();
+          closeEntryModal();
+        }
+      });
+      document.addEventListener("click", (event) => {
+        const retry = event.target instanceof Element ? event.target.closest("[data-retry], [data-retry-entry]") : null;
+        if (!retry) return;
+        event.preventDefault();
+        runSafely(bootstrap)();
+      });
+      $("logout").addEventListener("click", runSafely(async () => {
+        const button = $("logout");
+        button.disabled = true;
+        button.textContent = "退出中…";
+        try {
+          await fetch("/api/admin/logout", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" });
+        } catch (error) {
+          /* 退出接口失败也回到登录页 */
+        } finally {
+          location.href = "/login";
+        }
+      }));
+
+      /* ---------- bootstrap ---------- */
+      async function bootstrap() {
+        showToolbarMessage("", false);
+        const ok = await loadLibrary();
+        if (!ok) return;
+        if (state.library.length) {
+          state.selected = state.selected && state.library.some((doc) => String(doc.name) === state.selected)
+            ? state.selected
+            : String(state.library[0].name);
+          syncDocSelect();
+          markActiveDocument();
+          await loadEntries(state.selected);
+        } else {
+          renderEntries({ mode: "none" });
+        }
+      }
+      bootstrap();
+    })();
+  </script>
+</body>
+</html>

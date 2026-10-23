@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>管理后台登录 · Helpdesk</title>
+  <style>
+    :root { --nav:#142431; --blue:#1268a5; --blue-dark:#0e5488; --bg:#f3f6f8; --line:#dbe3e7; --muted:#71808a; --ink:#17232c; --bad:#b3261e; --bad-bg:#fdecea; }
+    * { box-sizing:border-box; }
+    html,body { height:100%; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:14px system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; display:flex; flex-direction:column; min-height:100vh; }
+    .top { height:60px; flex:0 0 60px; display:flex; align-items:center; justify-content:space-between; padding:0 28px; background:var(--nav); color:#fff; }
+    .brand { display:flex; align-items:center; gap:8px; font-size:14px; letter-spacing:.4px; }
+    .brand .dot { width:9px; height:9px; border-radius:2px; background:#36a879; display:inline-block; }
+    .brand b { font-weight:700; }
+    .brand .sep { color:#6f8b9c; }
+    .brand .sub { color:#b9d5e5; }
+    .top a { color:#b9d5e5; font-size:13px; text-decoration:none; }
+    .top a:hover { color:#fff; text-decoration:underline; }
+    .page { flex:1; display:flex; align-items:center; justify-content:center; padding:36px 18px; }
+    .card { width:min(404px,100%); padding:34px 34px 28px; border:1px solid var(--line); border-radius:12px; background:#fff; box-shadow:0 18px 40px -24px rgba(20,36,49,.45); }
+    .card-head h1 { margin:0 0 6px; font-size:20px; letter-spacing:.5px; }
+    .card-head p { margin:0 0 20px; color:var(--muted); font-size:12.5px; line-height:1.6; }
+    label { display:block; margin:14px 0 6px; font-size:12.5px; font-weight:600; color:#40525d; }
+    input { width:100%; height:42px; padding:0 12px; border:1px solid #ccd9df; border-radius:7px; background:#fbfcfd; color:var(--ink); font:inherit; transition:border-color .15s,box-shadow .15s,background .15s; }
+    input:focus { outline:none; border-color:var(--blue); background:#fff; box-shadow:0 0 0 3px rgba(18,104,165,.14); }
+    input::placeholder { color:#9aa8b0; }
+    button { width:100%; height:43px; margin-top:22px; border:0; border-radius:7px; background:var(--blue); color:#fff; font:inherit; font-weight:600; letter-spacing:2px; cursor:pointer; transition:background .15s,opacity .15s; }
+    button:hover { background:var(--blue-dark); }
+    button:focus-visible { outline:3px solid rgba(18,104,165,.35); outline-offset:2px; }
+    button:disabled { opacity:.7; cursor:progress; letter-spacing:1px; }
+    .notice { margin:0 0 4px; padding:10px 12px; border:1px solid #cfe6db; border-radius:7px; background:#eef8f3; color:#247d5b; font-size:12.5px; line-height:1.5; }
+    .error { margin:14px 0 0; padding:10px 12px; border:1px solid #f0c9c4; border-radius:7px; background:var(--bad-bg); color:var(--bad); font-size:12.5px; line-height:1.5; }
+    .hint { margin:20px 0 0; padding-top:14px; border-top:1px solid #eef2f4; color:var(--muted); font-size:11.5px; line-height:1.6; text-align:center; }
+    [hidden] { display:none !important; }
+    @media (max-width:480px) {
+      .top { padding:0 16px; }
+      .page { padding:24px 14px; align-items:flex-start; }
+      .card { padding:26px 20px 22px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="dot"></span><b>HELPDESK</b><span class="sep">/</span><span class="sub">后端监视</span></div>
+    <a href="/">返回对话</a>
+  </header>
+  <main class="page">
+    <section class="card" aria-labelledby="loginTitle">
+      <div class="card-head">
+        <h1 id="loginTitle">管理后台登录</h1>
+        <p>登录后可查看工单、知识库与智能体运行记录</p>
+      </div>
+      <p class="notice" id="notice" hidden>已退出登录，请重新输入管理员账号。</p>
+      <form id="loginForm" novalidate>
+        <label for="username">用户名</label>
+        <input id="username" name="username" type="text" autocomplete="username" autofocus spellcheck="false" autocapitalize="off" placeholder="请输入管理员用户名">
+        <label for="password">密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="请输入管理员密码">
+        <p class="error" id="error" role="alert" aria-live="polite" hidden></p>
+        <button id="submitBtn" type="submit">登 录</button>
+      </form>
+      <p class="hint">仅限授权管理员访问。登录状态将保持到会话过期或主动退出。</p>
+    </section>
+  </main>
+  <script>
+    (function () {
+      "use strict";
+      var params = new URLSearchParams(window.location.search);
+      var rawNext = params.get("next") || "";
+      // Only same-origin absolute paths are allowed: exactly one leading "/".
+      var safeNext = /^\/(?!\/)/.test(rawNext) && rawNext.indexOf("\\") === -1 && rawNext.indexOf("://") === -1 ? rawNext : "/backend";
+      var form = document.getElementById("loginForm");
+      var usernameInput = document.getElementById("username");
+      var passwordInput = document.getElementById("password");
+      var submitButton = document.getElementById("submitBtn");
+      var errorBox = document.getElementById("error");
+      var notice = document.getElementById("notice");
+
+      if (params.get("loggedout") === "1") {
+        notice.hidden = false;
+      }
+
+      function showError(message) {
+        errorBox.textContent = message;
+        errorBox.hidden = false;
+      }
+
+      function clearError() {
+        errorBox.textContent = "";
+        errorBox.hidden = true;
+      }
+
+      function setLoading(loading) {
+        submitButton.disabled = loading;
+        submitButton.textContent = loading ? "登录中…" : "登 录";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        clearError();
+        var username = usernameInput.value.trim();
+        var password = passwordInput.value;
+        if (!username || !password) {
+          showError("请输入用户名和密码");
+          (username ? passwordInput : usernameInput).focus();
+          return;
+        }
+        if (submitButton.disabled) {
+          return;
+        }
+        setLoading(true);
+        fetch("/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ username: username, password: password })
+        }).then(function (response) {
+          return response.json().catch(function () { return null; }).then(function (data) {
+            if (response.ok && data && data.ok) {
+              window.location.replace(safeNext);
+              return;
+            }
+            if (response.status === 429) {
+              showError("登录尝试次数过多，请 60 秒后再试。");
+            } else if (response.status === 503) {
+              showError((data && data.error) || "后台尚未配置管理员账号，请联系运维人员。");
+            } else if (response.status === 401) {
+              showError("用户名或密码错误");
+            } else {
+              showError((data && data.error) || "登录失败，请稍后重试");
+            }
+            setLoading(false);
+            passwordInput.select();
+          });
+        }).catch(function () {
+          showError("网络异常，请检查连接后重试");
+          setLoading(false);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

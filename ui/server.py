@@ -8,10 +8,12 @@ import secrets
 import sqlite3
 import sys
 import threading
+import time
 from datetime import datetime
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import quote
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -24,8 +26,9 @@ from src.agent_graph import run_agent_graph
 from src.agents.solution_retrieval import retrieve_solutions
 from src.intent import detect_intent
 from src.llm_client import LLMClient, load_config
+from src.rag import managed_store
 from src.rag.ingest import SUPPORTED
-from src.rag.vector_store import get_cached_store, load_documents
+from src.rag.vector_store import get_cached_store, index_directory, load_documents
 from src.ticket_parser import parse_ticket
 from src.web_search import search_web
 
@@ -35,6 +38,7 @@ load_config()
 
 INDEX = Path(__file__).with_name("index.html")
 BACKEND_INDEX = Path(__file__).with_name("backend.html")
+RAG_PAGE = Path(__file__).with_name("rag.html")
 DB_PATH = Path(os.getenv("HELPDESK_DB_PATH", str(Path(__file__).with_name("helpdesk.db"))))
 if not DB_PATH.is_absolute():
     DB_PATH = ROOT / DB_PATH
@@ -46,12 +50,37 @@ BACKEND_ONLY = os.getenv("HELPDESK_UI_MODE", "").lower() == "backend"
 _DB_SCHEMA_LOCK = threading.Lock()
 _SESSION_SECRET = os.getenv("HELPDESK_SESSION_SECRET", "") or secrets.token_urlsafe(32)
 IDENTITY_COOKIE = "helpdesk_identity"
+ADMIN_COOKIE = "helpdesk_admin"
+LOGIN_PAGE = Path(__file__).with_name("login.html")
+ADMIN_SESSION_DEFAULT_DAYS = 30
+LOGIN_MAX_FAILURES = 10
+LOGIN_WINDOW_SECONDS = 300
+LOGIN_RETRY_AFTER = 60
+# Very small in-memory throttle: per client IP, timestamps of rejected logins.
+_LOGIN_FAILURES: dict[str, list[float]] = {}
+_LOGIN_LOCK = threading.Lock()
+# Set once the local BGE model/Chroma collection is loaded in this process.  The
+# first embedding call costs several seconds, so a background warmup keeps the
+# first real RAG query fast without delaying service startup.
+_RAG_WARMED = threading.Event()
 
-ADMIN_PAGE_ROUTES = {"/backend", "/backend.html", "/admin", "/admin.html"}
+ADMIN_PAGE_ROUTES = {"/backend", "/backend.html", "/admin", "/admin.html", "/rag", "/rag.html"}
+RAG_PAGE_ROUTES = {"/rag", "/rag.html"}
 ADMIN_API_ROUTES = {
-    "/api/tickets", "/api/tickets/update", "/api/backend/runs",
+    "/api/tickets", "/api/tickets/update", "/api/backend/runs", "/api/backend/trace",
     "/api/rag/files", "/api/rag/status", "/api/rag/documents", "/api/rag/import",
-    "/api/rag/rebuild", "/api/rag/search", "/api/audit/users", "/api/audit/logs",
+    "/api/rag/rebuild", "/api/rag/search", "/api/rag/library", "/api/rag/entries",
+    "/api/rag/entries/create", "/api/rag/entries/update", "/api/rag/entries/delete",
+    "/api/rag/entries/move", "/api/rag/documents/delete",
+    "/api/audit/users", "/api/audit/logs",
+}
+# Login/logout are intentionally absent from ADMIN_API_ROUTES: they must stay
+# reachable without an existing session. POST routing also whitelists them.
+POST_ROUTES = {
+    "/api/review", "/api/chat", "/api/rag/import", "/api/rag/rebuild",
+    "/api/rag/search", "/api/tickets/update", "/api/admin/login", "/api/admin/logout",
+    "/api/rag/entries/create", "/api/rag/entries/update", "/api/rag/entries/delete",
+    "/api/rag/entries/move", "/api/rag/documents/delete",
 }
 USER_GET_ROUTES = {"/api/history", "/api/conversation", "/api/sessions", "/api/messages", "/api/trace"}
 
@@ -75,6 +104,107 @@ def _check_basic_auth(header: str | None) -> bool:
     except (ValueError, UnicodeDecodeError):
         return False
     return separator == ":" and hmac.compare_digest(supplied_user, username) and hmac.compare_digest(supplied_password, password)
+
+
+def _session_secret() -> str:
+    """Read the signing secret lazily so tests/restarts pick up environment changes."""
+    return os.getenv("HELPDESK_SESSION_SECRET", "").strip() or _SESSION_SECRET
+
+
+def _admin_session_ttl() -> int:
+    """Cookie lifetime in seconds; HELPDESK_ADMIN_SESSION_DAYS defaults to 30."""
+    raw = os.getenv("HELPDESK_ADMIN_SESSION_DAYS", "").strip()
+    try:
+        days = float(raw) if raw else float(ADMIN_SESSION_DEFAULT_DAYS)
+    except ValueError:
+        days = float(ADMIN_SESSION_DEFAULT_DAYS)
+    return int(min(max(days, 0.0), 3650.0) * 86400)
+
+
+def _admin_cookie_key(username: str, password: str) -> bytes:
+    """Derive the HMAC key from the deployment secret plus the admin credentials.
+
+    Including username/password means rotating the password invalidates every
+    outstanding admin cookie without a separate revocation list.
+    """
+    material = f"helpdesk-admin-v1\0{username}\0{password}".encode()
+    return hmac.new(_session_secret().encode("utf-8"), material, "sha256").digest()
+
+
+def _admin_token(username: str, password: str, issued: int | None = None) -> str:
+    encoded = base64.urlsafe_b64encode(username.encode("utf-8")).decode("ascii").rstrip("=")
+    issued_at = int(time.time()) if issued is None else int(issued)
+    payload = f"{encoded}.{issued_at}"
+    signature = hmac.new(_admin_cookie_key(username, password), payload.encode("ascii"), "sha256").digest()
+    signed = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+    return f"{payload}.{signed}"
+
+
+def _admin_token_user(token: str | None, username: str, password: str) -> str:
+    """Return the signed-in username for a valid admin cookie, else ''.
+
+    Verification is constant-time on the signature and rejects expired tokens
+    (HELPDESK_ADMIN_SESSION_DAYS) as well as tokens issued too far in the future.
+    """
+    if not token:
+        return ""
+    parts = token.split(".")
+    if len(parts) != 3:
+        return ""
+    encoded, issued_text, supplied_signature = parts
+    try:
+        issued = int(issued_text)
+    except (TypeError, ValueError):
+        return ""
+    now = int(time.time())
+    if issued > now + 300 or now - issued > _admin_session_ttl():
+        return ""
+    payload = f"{encoded}.{issued}"
+    expected_signature = base64.urlsafe_b64encode(
+        hmac.new(_admin_cookie_key(username, password), payload.encode("ascii"), "sha256").digest()
+    ).decode("ascii").rstrip("=")
+    if not hmac.compare_digest(supplied_signature, expected_signature):
+        return ""
+    try:
+        decoded = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    return decoded if hmac.compare_digest(decoded, username) else ""
+
+
+def _safe_next(raw: str | None, default: str = "/backend") -> str:
+    """Only allow same-origin absolute paths (single leading '/') as redirects."""
+    candidate = (raw or "").strip()
+    if not candidate.startswith("/") or candidate.startswith("//") or "\\" in candidate:
+        return default
+    if any(ord(char) < 0x20 for char in candidate):
+        return default
+    return candidate
+
+
+def _login_throttled(client_ip: str) -> bool:
+    now = time.time()
+    with _LOGIN_LOCK:
+        attempts = [stamp for stamp in _LOGIN_FAILURES.get(client_ip, ()) if now - stamp < LOGIN_WINDOW_SECONDS]
+        if attempts:
+            _LOGIN_FAILURES[client_ip] = attempts
+        else:
+            _LOGIN_FAILURES.pop(client_ip, None)
+        return len(attempts) >= LOGIN_MAX_FAILURES
+
+
+def _record_login_failure(client_ip: str) -> None:
+    now = time.time()
+    with _LOGIN_LOCK:
+        attempts = [stamp for stamp in _LOGIN_FAILURES.get(client_ip, ()) if now - stamp < LOGIN_WINDOW_SECONDS]
+        attempts.append(now)
+        # Bound memory usage: only the most recent window worth of stamps matter.
+        _LOGIN_FAILURES[client_ip] = attempts[-(LOGIN_MAX_FAILURES * 2):]
+
+
+def _clear_login_failures(client_ip: str) -> None:
+    with _LOGIN_LOCK:
+        _LOGIN_FAILURES.pop(client_ip, None)
 
 
 def _identity_token(user_id: str) -> str:
@@ -426,7 +556,8 @@ def review_ticket(payload: dict) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, status: int, body: bytes, content_type: str, set_cookie_user: str = "") -> None:
+    def _send(self, status: int, body: bytes, content_type: str, set_cookie_user: str = "",
+              extra_headers: dict[str, str] | None = None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -434,16 +565,22 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store" if content_type.startswith("application/json") else "no-cache")
         if set_cookie_user:
             self._set_identity_cookie(set_cookie_user)
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
-    def _cookie_user_id(self) -> str:
+    def _cookie_value(self, name: str) -> str:
         cookies = SimpleCookie()
         try:
             cookies.load(self.headers.get("Cookie", ""))
         except (CookieError, ValueError):
             return ""
-        return _identity_from_token(cookies.get(IDENTITY_COOKIE).value if cookies.get(IDENTITY_COOKIE) else None)
+        morsel = cookies.get(name)
+        return morsel.value if morsel else ""
+
+    def _cookie_user_id(self) -> str:
+        return _identity_from_token(self._cookie_value(IDENTITY_COOKIE))
 
     def _bind_request_user(self, payload: dict) -> str | None:
         """Use a signed server identity instead of trusting user_id from URLs."""
@@ -471,20 +608,77 @@ class Handler(BaseHTTPRequestHandler):
         secure = "; Secure" if os.getenv("HELPDESK_COOKIE_SECURE", "0") == "1" else ""
         self.send_header("Set-Cookie", f"{IDENTITY_COOKIE}={_identity_token(user_id)}; Path=/; HttpOnly; SameSite=Lax{secure}")
 
-    def _require_admin(self) -> bool:
+    def _admin_cookie_secure(self) -> bool:
+        """Secure cookie when explicitly enabled, else auto-detect HTTPS proxy."""
+        raw = os.getenv("HELPDESK_COOKIE_SECURE")
+        if raw is not None and raw.strip() != "":
+            return raw.strip() == "1"
+        forwarded = self.headers.get("X-Forwarded-Proto", "") or ""
+        return forwarded.split(",")[0].strip().lower() == "https"
+
+    def _admin_authenticated(self) -> bool:
+        username, password = _admin_credentials()
+        if not username or not password:
+            return False
+        # Basic auth stays accepted for curl/back-compat, but is never challenged.
+        if _check_basic_auth(self.headers.get("Authorization")):
+            return True
+        return bool(_admin_token_user(self._cookie_value(ADMIN_COOKIE), username, password))
+
+    def _admin_cookie_header(self, username: str, password: str) -> str:
+        ttl = _admin_session_ttl()
+        secure = "; Secure" if self._admin_cookie_secure() else ""
+        token = _admin_token(username, password)
+        return f"{ADMIN_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={ttl}{secure}"
+
+    def _cleared_admin_cookie_header(self) -> str:
+        secure = "; Secure" if self._admin_cookie_secure() else ""
+        return (f"{ADMIN_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; "
+                f"Expires=Thu, 01 Jan 1970 00:00:00 GMT{secure}")
+
+    def _require_admin(self, route: str, page: bool = False) -> bool:
+        """Gate admin routes without ever emitting a WWW-Authenticate challenge.
+
+        The native Basic-auth dialog is browser-triggered by that header, so
+        API callers receive JSON 401 and page navigations are redirected to the
+        cookie-based login page instead.
+        """
         username, password = _admin_credentials()
         if not username or not password:
             self._send(503, json.dumps({"error": "后台未配置管理员账号，请设置 HELPDESK_ADMIN_USER 和 HELPDESK_ADMIN_PASSWORD"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
             return False
-        if _check_basic_auth(self.headers.get("Authorization")):
+        if self._admin_authenticated():
             return True
-        self.send_response(401)
-        # HTTP/1.x headers are latin-1 encoded by BaseHTTPRequestHandler;
-        # keep the challenge ASCII even though the UI itself is Chinese.
-        self.send_header("WWW-Authenticate", 'Basic realm="Helpdesk Admin"')
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+        if page:
+            self._send(302, b"", "text/html; charset=utf-8",
+                       extra_headers={"Location": f"/login?next={quote(route, safe='/')}"})
+        else:
+            body = json.dumps({"error": "登录已过期，请重新登录", "login": "/login?next=/backend"}, ensure_ascii=False).encode()
+            self._send(401, body, "application/json; charset=utf-8")
         return False
+
+    def _handle_admin_login(self, payload: dict) -> None:
+        username, password = _admin_credentials()
+        if not username or not password:
+            self._send(503, json.dumps({"error": "后台未配置管理员账号，请设置 HELPDESK_ADMIN_USER 和 HELPDESK_ADMIN_PASSWORD"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return
+        client_ip = self.client_address[0] if self.client_address else ""
+        if _login_throttled(client_ip):
+            self._send(429, json.dumps({"error": "登录尝试次数过多，请稍后再试"}, ensure_ascii=False).encode(),
+                       "application/json; charset=utf-8", extra_headers={"Retry-After": str(LOGIN_RETRY_AFTER)})
+            return
+        supplied_user = str(payload.get("username", ""))
+        supplied_password = str(payload.get("password", ""))
+        user_ok = hmac.compare_digest(supplied_user.encode("utf-8"), username.encode("utf-8"))
+        password_ok = hmac.compare_digest(supplied_password.encode("utf-8"), password.encode("utf-8"))
+        if not (user_ok and password_ok):
+            _record_login_failure(client_ip)
+            self._send(401, json.dumps({"error": "用户名或密码错误"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return
+        _clear_login_failures(client_ip)
+        body = json.dumps({"ok": True, "redirect": "/backend"}, ensure_ascii=False).encode()
+        self._send(200, body, "application/json; charset=utf-8",
+                   extra_headers={"Set-Cookie": self._admin_cookie_header(username, password)})
 
     def do_GET(self) -> None:
         from urllib.parse import parse_qs, urlparse
@@ -494,7 +688,18 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/healthz":
             self._send(200, b'{"status":"ok"}', "application/json; charset=utf-8")
             return
-        if _is_admin_route(route) and not self._require_admin():
+        # Serve the login page before the admin guard; it is the destination for
+        # unauthenticated page navigations and must never be gated itself.
+        if route in ("/login", "/login.html"):
+            if self._admin_authenticated():
+                self._send(302, b"", "text/html; charset=utf-8",
+                           extra_headers={"Location": _safe_next(query.get("next", [""])[0])})
+                return
+            self._send(200, LOGIN_PAGE.read_bytes(), "text/html; charset=utf-8")
+            return
+        if route in ADMIN_PAGE_ROUTES and not self._require_admin(route, page=True):
+            return
+        if route in ADMIN_API_ROUTES and not self._require_admin(route):
             return
         if route in USER_GET_ROUTES:
             current_user = self._cookie_user_id()
@@ -516,26 +721,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, BACKEND_INDEX.read_bytes(), "text/html; charset=utf-8")
             return
         if route in ("/", "/index.html"):
-            html = INDEX.read_text(encoding="utf-8")
-            html = html.replace('<div class="skills"><div class="label">SKILLS</div><div id="skillList"></div><button class="import" id="importSkill">导入 Skill</button></div>', '', 1)
-            toolbar = '<div class="online-tools"><label><input type="checkbox" id="onlineSearch"> 在线搜索</label><span id="searchHint">关闭：仅使用对话上下文和本地知识库</span></div>'
-            html = html.replace('<div class="compose"><textarea', toolbar + '<div class="compose"><textarea', 1)
-            html = html.replace('const $=id=>document.getElementById(id),labels={', 'const onlineSearch=document.getElementById("onlineSearch");onlineSearch?.addEventListener("change",()=>{document.getElementById("searchHint").textContent=onlineSearch.checked?"开启：将参考公开网页并标注为网络信息":"关闭：仅使用对话上下文和本地知识库"});const $=id=>document.getElementById(id),labels={web_search:"在线搜索",', 1)
-            html = html.replace('session_id:sessionId,message:text})', 'session_id:sessionId,message:text,online_search:Boolean(onlineSearch?.checked)})', 1)
-            html = html.replace("if(!r.ok)throw Error(d.error||'请求失败');bubble('assistant'", "if(!r.ok)throw Error(d.error||'请求失败');userId=d.user_id||userId;localStorage.setItem('helpdesk_user',userId);bubble('assistant'", 1)
-            html = html.replace('</style>', '.online-tools{max-width:720px;margin:0 auto 8px;padding:7px 10px;color:#71808a;font-size:11px;display:flex;gap:10px;align-items:center;border:1px solid #dbe3e7;border-radius:7px;background:#f7fafb}.online-tools label{color:#1268a5;font-weight:700}.online-tools input{accent-color:#1268a5}.online-tools strong{font-weight:600}\n</style>', 1)
-            ticket_modal = '''<div id="ticketModal" class="ticket-modal"><div class="ticket-card"><h2>提交工单</h2><input id="ticketTitle" placeholder="标题"><input id="ticketRequester" placeholder="申请人"><textarea id="ticketDescription" placeholder="请描述现象、报错、已尝试操作和影响范围"></textarea><select id="ticketChannel"><option value="chat">聊天</option><option value="portal">门户</option><option value="email">邮件</option><option value="phone">电话</option></select><input id="ticketContact" class="ticket-contact" placeholder="联系方式（手机号 / 邮箱 / 分机号）"><div><button onclick="closeTicketModal()">取消</button><button class="ticket-primary" onclick="submitTicket()">提交</button></div><p id="ticketMessage"></p></div></div>'''
-            html = html.replace('</body>', ticket_modal + '''<script>function openTicketModal(){document.getElementById("ticketModal").classList.add("open");document.getElementById("ticketRequester").value=localStorage.getItem("helpdesk_user")||""}function closeTicketModal(){document.getElementById("ticketModal").classList.remove("open")}async function submitTicket(){const title=document.getElementById("ticketTitle").value.trim(),requester=document.getElementById("ticketRequester").value.trim(),description=document.getElementById("ticketDescription").value.trim(),channel=document.getElementById("ticketChannel").value,contact=document.getElementById("ticketContact").value.trim(),msg=document.getElementById("ticketMessage");if(!title||!requester||!description){msg.textContent="请填写标题、申请人和描述";return}msg.textContent="提交中…";try{const response=await fetch("/api/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:localStorage.getItem("helpdesk_user")||requester,session_id:sessionId,ticket:{title,requester,description,channel,contact}})});const data=await response.json();if(!response.ok){msg.textContent=data.error||"提交失败";return}msg.textContent="工单已提交："+(data.ticket?.ticket_id||data.ticket_id||"已生成");setTimeout(closeTicketModal,1200)}catch(error){msg.textContent="提交失败："+error.message}}</script></body>''', 1)
-            html = html.replace('if(!response.ok){msg.textContent=data.error||"提交失败";return}msg.textContent="工单已提交', 'if(!response.ok){msg.textContent=data.error||"提交失败";return}userId=data.user_id||userId;localStorage.setItem("helpdesk_user",userId);msg.textContent="工单已提交', 1)
-            # The UI is intentionally compacted into one line, so replace the
-            # stable interpolation rather than the surrounding function text.
-            html = html.replace(
-                '${esc(text)}</div>`;',
-                '${esc(text)}${role===\'assistant\'&&text.includes(\'工单提交流程\')?\'<button class="ticket-action" onclick="openTicketModal()">提交工单</button>\':\'\'}</div>`;',
-                1,
-            )
-            html = html.replace('</style>', '.ticket-action{display:block;margin-top:10px;border:0;border-radius:6px;padding:8px 12px;background:#1268a5;color:#fff;cursor:pointer}.ticket-modal{position:fixed;inset:0;background:#0e1b24aa;display:none;place-items:center;z-index:10}.ticket-modal.open{display:grid}.ticket-card{width:min(520px,92%);background:#fff;border-radius:9px;padding:20px}.ticket-card input,.ticket-card textarea,.ticket-card select{width:100%;margin:6px 0 10px;padding:10px;border:1px solid #dbe3e7;border-radius:6px;font:inherit}.ticket-card .ticket-contact{background:#f1f3f5;color:#596771;border-color:#d8dee2}.ticket-card .ticket-contact::placeholder{color:#87939b}.ticket-card textarea{min-height:130px}.ticket-card button{padding:9px 14px;border:0;border-radius:6px;margin-right:8px;cursor:pointer}.ticket-primary{background:#1268a5;color:#fff}.ticket-card p{font-size:12px;color:#71808a}\n</style>', 1)
-            self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
+            # The user-facing page is a self-contained static file.  All client
+            # behaviour (chat, ticket modal, online search, identity) lives in
+            # ui/index.html; the server no longer rewrites the HTML at runtime.
+            self._send(200, INDEX.read_bytes(), "text/html; charset=utf-8")
+            return
+        if route in RAG_PAGE_ROUTES:
+            # ui/rag.html is ui-eng's page; serve it when deployed, otherwise a
+            # friendly JSON 404 instead of a generic "Not found".
+            if not RAG_PAGE.is_file():
+                self._send(404, json.dumps({"error": "RAG 管理页面尚未部署"}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                return
+            self._send(200, RAG_PAGE.read_bytes(), "text/html; charset=utf-8")
             return
         if route in ADMIN_PAGE_ROUTES:
             self._send(200, BACKEND_INDEX.read_bytes(), "text/html; charset=utf-8")
@@ -632,14 +829,29 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
             self._send(200, json.dumps([dict(row) for row in rows], ensure_ascii=False).encode(), "application/json; charset=utf-8")
             return
+        if route == "/api/backend/trace":
+            # Admin counterpart of /api/trace: the backend browser has no chat
+            # identity cookie, so the admin session authorises the read instead.
+            user_id = query.get("user_id", [""])[0].strip()
+            session_id = query.get("session_id", [""])[0].strip()
+            if not user_id or not session_id:
+                self._send(200, b"[]", "application/json; charset=utf-8")
+                return
+            conn = db()
+            rows = conn.execute(
+                "SELECT node,status,timestamp,result_count,error FROM agent_traces WHERE user_id=? AND session_id=? ORDER BY id",
+                (user_id, session_id),
+            ).fetchall()
+            conn.close()
+            self._send(200, json.dumps([dict(row) for row in rows], ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return
         if route == "/api/rag/files":
             RAG_IMPORT_PATH.mkdir(parents=True, exist_ok=True)
             files = [{"name": p.name, "size": p.stat().st_size} for p in sorted(RAG_IMPORT_PATH.iterdir()) if p.is_file()]
             self._send(200, json.dumps(files, ensure_ascii=False).encode(), "application/json; charset=utf-8")
             return
         if route == "/api/rag/status":
-            index = Path(load_config()["rag"]["index_dir"])
-            index = index if index.is_absolute() else ROOT / index
+            index = index_directory()
             ready = index / ".ready"
             indexed = 0
             ready_ok = False
@@ -650,13 +862,28 @@ class Handler(BaseHTTPRequestHandler):
                 # A partial/corrupt marker means the index is not ready.
                 pass
             payload = {"ready": ready_ok, "indexed_documents": indexed,
-                       "source_documents": len(load_documents())}
+                       "source_documents": len(load_documents()),
+                       "managed_entries": managed_store.stats()["entries"],
+                       "library_ready": True,
+                       "search_ready": _RAG_WARMED.is_set()}
             self._send(200, json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return
+        if route == "/api/rag/library":
+            self._send(200, json.dumps({"documents": managed_store.list_documents(),
+                                        "stats": managed_store.stats()},
+                                       ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return
+        if route == "/api/rag/entries":
+            document = query.get("document", [""])[0].strip()
+            keyword = query.get("q", [""])[0].strip()
+            entries = managed_store.list_entries(document=document or None, query=keyword)
+            self._send(200, json.dumps({"entries": entries}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
             return
         if route == "/api/rag/documents":
             documents = load_documents()
-            preview = [{"source": item["source"], "title": item["title"],
-                        "steps": item.get("steps", []), "preview": item["text"][:240]}
+            preview = [{"id": item["id"], "source": item["source"], "document": item["source"],
+                        "title": item["title"], "steps": item.get("steps", []),
+                        "enabled": True, "preview": item["text"][:240]}
                        for item in documents]
             self._send(200, json.dumps(preview, ensure_ascii=False).encode(), "application/json; charset=utf-8")
             return
@@ -686,10 +913,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         from urllib.parse import urlparse
         route = urlparse(self.path).path
-        if route not in ("/api/review", "/api/chat", "/api/rag/import", "/api/rag/rebuild", "/api/rag/search", "/api/tickets/update"):
+        if route not in POST_ROUTES:
             self._send(404, b"Not found", "text/plain; charset=utf-8")
             return
-        if _is_admin_route(route) and not self._require_admin():
+        # /api/admin/login and /api/admin/logout are intentionally not admin
+        # routes: they are how a browser obtains/clears the admin session.
+        if _is_admin_route(route) and not self._require_admin(route):
             return
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -703,6 +932,49 @@ class Handler(BaseHTTPRequestHandler):
                 identity_cookie = self._bind_request_user(payload) or ""
                 if not payload.get("user_id"):
                     raise ValueError("用户标识不能为空")
+            if route == "/api/admin/login":
+                self._handle_admin_login(payload)
+                return
+            if route == "/api/admin/logout":
+                self._send(200, b'{"ok":true}', "application/json; charset=utf-8",
+                           extra_headers={"Set-Cookie": self._cleared_admin_cookie_header()})
+                return
+            if route == "/api/rag/entries/create":
+                result = managed_store.create_entry(
+                    document=str(payload.get("document", "")),
+                    title=str(payload.get("title", "")),
+                    text=str(payload.get("text", "")),
+                    steps=payload.get("steps"),
+                    enabled=bool(payload.get("enabled", True)),
+                )
+                self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                return
+            if route == "/api/rag/entries/update":
+                update_kwargs: dict = {}
+                if "title" in payload:
+                    update_kwargs["title"] = payload.get("title")
+                if "text" in payload:
+                    update_kwargs["text"] = payload.get("text")
+                if "steps" in payload:
+                    update_kwargs["steps"] = payload.get("steps")
+                if "enabled" in payload:
+                    update_kwargs["enabled"] = bool(payload.get("enabled"))
+                result = managed_store.update_entry(str(payload.get("id", "")), **update_kwargs)
+                self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                return
+            if route == "/api/rag/entries/delete":
+                result = managed_store.delete_entry(str(payload.get("id", "")))
+                self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                return
+            if route == "/api/rag/entries/move":
+                result = managed_store.move_entry(str(payload.get("id", "")),
+                                                  str(payload.get("target_document", "")))
+                self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                return
+            if route == "/api/rag/documents/delete":
+                result = managed_store.remove_document(str(payload.get("document", "")))
+                self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                return
             if route == "/api/rag/import":
                 import base64
                 name = Path(str(payload.get("name", ""))).name
@@ -719,19 +991,42 @@ class Handler(BaseHTTPRequestHandler):
                 if len(content) > MAX_IMPORT_BYTES:
                     raise ValueError("单个文件最大允许 10 MB")
                 RAG_IMPORT_PATH.mkdir(parents=True, exist_ok=True)
-                (RAG_IMPORT_PATH / name).write_bytes(content)
+                target = RAG_IMPORT_PATH / name
+                target.write_bytes(content)
                 record_access(*request_identity(payload), "POST", route)
-                result = {"saved": True, "name": name}
+                try:
+                    imported = managed_store.import_file(target)
+                except managed_store.StoreError:
+                    # Empty/unparseable uploads must never leave a broken file
+                    # (or destroy the previous entries for that filename).
+                    target.unlink(missing_ok=True)
+                    raise
+                result = {"saved": True, "name": name, "document": imported["document"],
+                          "chunks": imported["chunks"], "replaced": imported["replaced"],
+                          "indexed": imported["indexed"], "stats": imported["stats"]}
             elif route == "/api/rag/rebuild":
                 record_access(*request_identity(payload), "POST", route)
-                store = get_cached_store()
-                result = {"count": store.rebuild(load_documents())}
+                documents = managed_store.load_documents()
+                if not documents:
+                    raise ValueError("知识库为空，无法重建索引")
+                started = time.perf_counter()
+                sync = managed_store.sync_index()
+                print(f"[ui] RAG rebuild finished in {time.perf_counter() - started:.2f}s "
+                      f"({sync.get('count', 0)} docs, indexed={sync.get('indexed')})", flush=True)
+                result = {"count": sync.get("count", len(documents)),
+                          "indexed": bool(sync.get("indexed")),
+                          "stats": managed_store.stats()}
             elif route == "/api/rag/search":
                 query = str(payload.get("query", "")).strip()
                 if not query:
                     raise ValueError("检索内容不能为空")
                 record_access(*request_identity(payload), "POST", route)
-                result = {"query": query, "matches": get_cached_store().search(query, top_k=5)}
+                started = time.perf_counter()
+                matches = get_cached_store().search(query, top_k=5)
+                elapsed = time.perf_counter() - started
+                if elapsed >= 0.3:
+                    print(f"[ui] RAG search slow: {elapsed:.2f}s hits={len(matches)} query={query[:40]!r}")
+                result = {"query": query, "matches": matches}
             elif route == "/api/chat":
                 user_id = str(payload.get("user_id", "")).strip()
                 session_id = str(payload.get("session_id", "")).strip() or uuid4().hex
@@ -740,7 +1035,12 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("用户标识和消息不能为空")
                 record_access(user_id, session_id, "POST", route)
                 online_search = bool(payload.get("online_search", False))
+                started = time.perf_counter()
                 result = chat_reply(user_id, session_id, message, online_search=online_search)
+                elapsed = time.perf_counter() - started
+                if elapsed >= 2.0:
+                    mode = (result.get("intent") or {}).get("reply_mode", "")
+                    print(f"[ui] chat reply slow: {elapsed:.2f}s mode={mode} chars={len(message)}")
             elif route == "/api/tickets/update":
                 ticket_id = str(payload.get("ticket_id", "")).strip()
                 status = str(payload.get("status", "")).strip().lower()
@@ -776,11 +1076,17 @@ class Handler(BaseHTTPRequestHandler):
             if route in {"/api/chat", "/api/review"}:
                 result["user_id"] = payload["user_id"]
             self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8", identity_cookie)
+        except managed_store.NotFoundError as exc:
+            body = json.dumps({"error": str(exc)}, ensure_ascii=False).encode()
+            self._send(404, body, "application/json; charset=utf-8")
+        except managed_store.EmptyTextError as exc:
+            body = json.dumps({"error": str(exc)}, ensure_ascii=False).encode()
+            self._send(400, body, "application/json; charset=utf-8")
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             body = json.dumps({"error": str(exc)}, ensure_ascii=False).encode()
             self._send(400, body, "application/json; charset=utf-8")
         except Exception as exc:
-            print(f"[ui] POST {route} failed: {exc}", file=sys.stderr)
+            print(f"[ui] POST {route} failed: {exc}", file=sys.stderr, flush=True)
             self._send(500, b'{"error":"server internal error"}', "application/json; charset=utf-8")
 
     def do_DELETE(self) -> None:
@@ -788,7 +1094,7 @@ class Handler(BaseHTTPRequestHandler):
 
         parsed_url = urlparse(self.path)
         route = parsed_url.path
-        if route == "/api/rag/files" and not self._require_admin():
+        if route == "/api/rag/files" and not self._require_admin(route):
             return
         record_access("", "", "DELETE", route)
 
@@ -802,7 +1108,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, b'{"error":"file not found"}', "application/json; charset=utf-8")
                 return
             target.unlink()
-            self._send(200, b'{"deleted":true}', "application/json; charset=utf-8")
+            result = managed_store.remove_file(target)
+            payload = {"deleted": True, "document": name,
+                       "removed": result.get("removed", 0),
+                       "stats": result.get("stats", {}),
+                       "indexed": bool(result.get("indexed"))}
+            self._send(200, json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
             return
         if route != "/api/sessions":
             self._send(404, b"Not found", "text/plain; charset=utf-8")
@@ -828,7 +1139,26 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, b'{"deleted":true}', "application/json; charset=utf-8")
 
     def log_message(self, format: str, *args) -> None:
-        print(f"[ui] {self.address_string()} - {format % args}")
+        print(f"[ui] {self.address_string()} - {format % args}", flush=True)
+
+
+def _warm_rag_index() -> None:
+    """Load the local BGE model and Chroma collection ahead of the first query.
+
+    The first embedding call costs ~5-6 s (torch + model weights + Chroma).  The
+    HTTP server is already accepting connections when this runs, so startup and
+    /healthz stay instant while the first real RAG search is fast.
+    """
+    started = time.perf_counter()
+    try:
+        store = get_cached_store()
+        # A tiny query initialises torch kernels; the result is intentionally unused.
+        store.search("RAG 预热", top_k=1)
+    except Exception as exc:  # optional dependency/model missing: keep serving
+        print(f"[ui] RAG warmup skipped: {exc}", flush=True)
+        return
+    _RAG_WARMED.set()
+    print(f"[ui] RAG warmup ready in {time.perf_counter() - started:.2f}s", flush=True)
 
 
 def main() -> None:
@@ -839,13 +1169,25 @@ def main() -> None:
         port = int(sys.argv[1])
     if len(sys.argv) > 2:
         host = sys.argv[2]
-    if os.getenv("HELPDESK_RAG_PREWARM", "1") == "1":
-        try:
-            get_cached_store()
-        except Exception as exc:
-            print(f"RAG prewarm skipped: {exc}")
+
+    # RAG prewarm policy:
+    #   1 / true / sync      -> load BGE/Chroma before binding the socket, so
+    #                           the first real query never pays the cold start
+    #   background (default) -> load in a daemon thread after binding; startup
+    #                           stays fast but a query arriving during warmup waits
+    #   0 / off              -> never prewarm (first query pays the cold start)
+    prewarm = os.getenv("HELPDESK_RAG_PREWARM", "background").strip().lower()
+    background_warmup = False
+    if prewarm not in {"0", "off", "false", "no", "none"}:
+        if prewarm in {"1", "true", "sync", "yes", "on"}:
+            _warm_rag_index()
+        else:
+            background_warmup = True
+
     server = ThreadingHTTPServer((host, port), Handler)
-    print(f"Helpdesk UI running at http://{host}:{port}")
+    print(f"Helpdesk UI running at http://{host}:{port}", flush=True)
+    if background_warmup:
+        threading.Thread(target=_warm_rag_index, name="rag-warmup", daemon=True).start()
     server.serve_forever()
 
 

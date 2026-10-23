@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,23 @@ except ImportError:  # pragma: no cover
     OpenAI = None
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Every LLMClient() used to build its own OpenAI/httpx client, so a chat that
+# performs two model calls paid two fresh TCP+TLS handshakes.  Reuse one client
+# per (key, endpoint, timeout) so HTTP keep-alive works across calls/agents.
+_CLIENTS: dict[tuple[str, str, float], Any] = {}
+_CLIENTS_LOCK = threading.Lock()
+
+
+def _shared_client(api_key: str, base_url: str, timeout: float) -> Any:
+    key = (api_key, base_url, timeout)
+    with _CLIENTS_LOCK:
+        client = _CLIENTS.get(key)
+        if client is None:
+            client = OpenAI(api_key=api_key, base_url=base_url,
+                            max_retries=0, timeout=timeout)
+            _CLIENTS[key] = client
+        return client
 
 def _load_dotenv() -> None:
     """Load simple KEY=VALUE pairs without adding a dotenv dependency."""
@@ -45,9 +63,9 @@ class LLMClient:
         self._client = client
         if self._client is None and OpenAI and self.api_key:
             # Retries are owned here so agent-level retry budgets remain
-            # predictable instead of being multiplied by SDK retries.
-            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url,
-                                  max_retries=0, timeout=self.timeout)
+            # predictable instead of being multiplied by SDK retries.  The
+            # underlying client is shared so HTTP keep-alive is reused.
+            self._client = _shared_client(self.api_key, self.base_url, self.timeout)
 
     def json_completion(self, messages: list[dict[str, str]], retries: int = 3) -> Any:
         retries = max(1, int(retries))

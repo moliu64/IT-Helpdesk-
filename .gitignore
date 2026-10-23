@@ -4,6 +4,7 @@ output/
 .jez/
 data/tickets/index/
 data/knowledge/imports/
+data/knowledge/managed_entries.json
 deploy/060115.top/cloudflared-local-config.yml
 __pycache__/
 *.py[cod]

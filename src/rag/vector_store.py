@@ -1,8 +1,9 @@
-"""Chroma vector store backed exclusively by a local BGE model."""
+"""Chroma vector store backed by the managed knowledge store and a local BGE model."""
 from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -18,52 +19,14 @@ _CACHED_STORES: dict[tuple[str, str, str], VectorStore] = {}
 _CACHE_LOCK = threading.Lock()
 
 def load_documents(root: Path = ROOT) -> list[dict[str, Any]]:
-    documents: list[dict[str, Any]] = []
-    for path in sorted((root / "data" / "knowledge").glob("KB-*.md")):
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as exc:
-            logger.warning("跳过无法读取的知识库文件 %s: %s", path, exc)
-            continue
-        title = next((line[2:].strip() for line in text.splitlines() if line.startswith("# ")), path.stem)
-        steps = [line.split(". ", 1)[1] for line in text.splitlines() if line[:1].isdigit() and ". " in line]
-        documents.append({"id": path.stem, "text": text, "source": path.stem, "title": title, "steps": steps})
-    ticket_file = root / "data" / "tickets" / "historical_tickets.json"
-    if ticket_file.exists():
-        try:
-            history = json.loads(ticket_file.read_text(encoding="utf-8"))
-            if not isinstance(history, list):
-                raise ValueError("历史工单必须是数组")
-        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-            logger.warning("历史工单文件不可用，跳过：%s", exc)
-            history = []
-        for ticket in history:
-            if not isinstance(ticket, dict):
-                logger.warning("跳过非对象历史工单记录")
-                continue
-            required = ("ticket_id", "title", "description", "resolution")
-            if any(not isinstance(ticket.get(field), str) or not ticket[field].strip() for field in required):
-                logger.warning("跳过字段不完整的历史工单：%r", ticket.get("ticket_id"))
-                continue
-            text = f"{ticket['title']}\n{ticket['description']}\n解决方案：{ticket['resolution']}"
-            resolution_steps = [
-                line.split(". ", 1)[1].strip()
-                for line in ticket["resolution"].splitlines()
-                if line[:1].isdigit() and ". " in line
-            ] or [ticket["resolution"]]
-            documents.append({"id": ticket["ticket_id"], "text": text, "source": ticket["ticket_id"],
-                              "title": ticket["title"], "steps": resolution_steps})
-    # Imported files use the same document contract as built-in KB articles.
-    from src.rag.ingest import SUPPORTED, documents_from_file
-    imports = root / "data" / "knowledge" / "imports"
-    if imports.exists():
-        for path in sorted(imports.iterdir()):
-            if path.is_file() and path.suffix.lower() in SUPPORTED:
-                try:
-                    documents.extend(documents_from_file(path))
-                except (OSError, UnicodeError, ValueError, TypeError) as exc:
-                    logger.warning("跳过无法解析的导入文件 %s: %s", path, exc)
-    return documents
+    """Return indexable chunks.
+
+    The project root delegates to the persistent managed store (the editable
+    source of truth).  Any other root keeps the legacy file-only behaviour so
+    tests and scripts can build isolated corpora.
+    """
+    from src.rag import managed_store
+    return managed_store.load_documents(root)
 
 class LocalBGEEmbeddingFunction:
     def __init__(self, model_name: str):
@@ -83,8 +46,16 @@ def _settings(config: dict[str, Any] | None = None) -> tuple[dict[str, Any], Pat
     embedding = settings.get("embedding", {})
     if embedding.get("provider") != "local":
         raise ValueError("本项目 RAG 仅允许 embedding.provider=local")
-    index = Path(settings["rag"]["index_dir"])
+    # HELPDESK_RAG_INDEX_DIR lets tests/manual checks isolate Chroma artifacts
+    # without editing config/config.yaml (absolute or ROOT-relative).
+    override = os.getenv("HELPDESK_RAG_INDEX_DIR", "").strip()
+    index = Path(override) if override else Path(settings["rag"]["index_dir"])
     return settings, index if index.is_absolute() else ROOT / index
+
+
+def index_directory(config: dict[str, Any] | None = None) -> Path:
+    """Effective Chroma index directory (honours HELPDESK_RAG_INDEX_DIR)."""
+    return _settings(config)[1]
 
 class VectorStore:
     def __init__(self, config: dict[str, Any] | None = None):
